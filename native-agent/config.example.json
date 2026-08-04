@@ -1,0 +1,20 @@
+{
+  "server_url": "http://10.0.0.4:8088",
+  "enrollment_token": "REPLACE_WITH_ENROLLMENT_TOKEN",
+  "device_name": "SERVER-APP01",
+  "collection_interval_seconds": 30,
+  "request_timeout_seconds": 15,
+  "allow_insecure_http": true,
+  "skip_tls_verify": false,
+  "state_directory": "/var/lib/eits-agent",
+  "log_directory": "/var/log/eits-agent",
+  "queue": {
+    "enabled": true,
+    "maximum_records": 2880
+  },
+  "logging": {
+    "level": "info",
+    "maximum_size_mb": 10,
+    "maximum_files": 5
+  }
+}

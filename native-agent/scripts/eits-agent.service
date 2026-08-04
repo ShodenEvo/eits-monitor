@@ -1,0 +1,18 @@
+[Unit]
+Description=EITS Monitoring Agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/eits-agent run
+Restart=always
+RestartSec=10
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/eits-agent /var/log/eits-agent /etc/eits-agent
+
+[Install]
+WantedBy=multi-user.target

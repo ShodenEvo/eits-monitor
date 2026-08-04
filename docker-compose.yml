@@ -1,0 +1,76 @@
+services:
+  db:
+    image: postgres:17.10-alpine3.23
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks: [eits]
+
+  api:
+    build: ./server
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      SECRET_KEY: ${SECRET_KEY}
+      ADMIN_USERNAME: ${ADMIN_USERNAME}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      AGENT_ENROLLMENT_TOKEN: ${AGENT_ENROLLMENT_TOKEN}
+      METRIC_RETENTION_DAYS: ${METRIC_RETENTION_DAYS:-30}
+      COOKIE_SECURE: "false"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks: [eits]
+
+  web:
+    build: ./web
+    restart: unless-stopped
+    ports:
+      - "${WEB_PORT:-8088}:80"
+    depends_on:
+      api:
+        condition: service_healthy
+    networks: [eits]
+
+  agent:
+    build: ./agent
+    restart: unless-stopped
+    pid: host
+    environment:
+      EITS_SERVER_URL: http://api:8000
+      EITS_ENROLLMENT_TOKEN: ${AGENT_ENROLLMENT_TOKEN}
+      EITS_DEVICE_NAME: ${HOSTNAME:-eits-docker-host}
+      EITS_INTERVAL: 30s
+      EITS_HOST_ROOT: /hostfs
+      EITS_STATE_FILE: /data/agent.json
+    volumes:
+      - agent_data:/data
+      - /:/hostfs:ro,rslave
+      - /proc:/hostproc:ro
+      - /sys:/hostsys:ro
+    depends_on:
+      api:
+        condition: service_healthy
+    networks: [eits]
+
+networks:
+  eits:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  agent_data:

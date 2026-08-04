@@ -1,0 +1,1 @@
+{"name":"eits-monitor-web","private":true,"version":"0.1.0","type":"module","scripts":{"dev":"vite","build":"tsc -b && vite build"},"dependencies":{"@vitejs/plugin-react":"latest","vite":"^8.1.0","typescript":"^5.9.2","react":"^19.2.7","react-dom":"^19.2.7","recharts":"^3.1.2"},"devDependencies":{"@types/react":"^19.1.10","@types/react-dom":"^19.1.7"}}
