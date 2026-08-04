@@ -3,8 +3,13 @@
 package collector
 
 import (
+	"encoding/json"
 	"fmt"
+	"os/exec"
+	"runtime"
+	"strings"
 	"syscall"
+	"time"
 	"unsafe"
 )
 
@@ -91,3 +96,28 @@ func readDisks() ([]DiskMetric, error) {
 }
 
 func readNetwork() (uint64, uint64) { return 0, 0 }
+
+func readInventory() (Inventory, error) {
+	script := `$ErrorActionPreference='SilentlyContinue';$cs=Get-CimInstance Win32_ComputerSystem;$os=Get-CimInstance Win32_OperatingSystem;$cpu=@(Get-CimInstance Win32_Processor);$bios=Get-CimInstance Win32_BIOS;$gpu=@(Get-CimInstance Win32_VideoController|ForEach-Object{[pscustomobject]@{vendor='';model=$_.Name;memory_bytes=[uint64]$_.AdapterRAM;driver_version=$_.DriverVersion}});$hotfix=Get-HotFix|Sort-Object InstalledOn -Descending|Select-Object -First 1;[pscustomobject]@{manufacturer=$cs.Manufacturer;model=$cs.Model;serial_number=$bios.SerialNumber;device_type=if($cs.Model -match 'Virtual|VMware|VirtualBox|KVM'){ 'virtual' }else{'physical'};os_name=$os.Caption;os_version=$os.Version;os_build=$os.BuildNumber;kernel_version=$os.Version;last_os_update=if($hotfix){$hotfix.HotFixID+' '+$hotfix.InstalledOn}else{''};cpu_vendor=if($cpu.Count){$cpu[0].Manufacturer}else{''};cpu_model=if($cpu.Count){$cpu[0].Name}else{''};cpu_physical_cores=($cpu|Measure-Object NumberOfCores -Sum).Sum;cpu_logical_processors=($cpu|Measure-Object NumberOfLogicalProcessors -Sum).Sum;total_memory_bytes=[uint64]$cs.TotalPhysicalMemory;bios_version=($bios.SMBIOSBIOSVersion);gpus=$gpu}|ConvertTo-Json -Depth 5 -Compress`
+	out, err := exec.Command("powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script).Output()
+	if err != nil {
+		return Inventory{}, err
+	}
+	var inv Inventory
+	if err := json.Unmarshal(out, &inv); err != nil {
+		return Inventory{}, err
+	}
+	inv.CollectedAt = time.Now().UTC()
+	if inv.CPULogicalProcessors == 0 {
+		inv.CPULogicalProcessors = runtime.NumCPU()
+	}
+	if inv.CPUPhysicalCores == 0 {
+		inv.CPUPhysicalCores = inv.CPULogicalProcessors
+	}
+	if inv.GPUs == nil {
+		inv.GPUs = []GPUInfo{}
+	}
+	inv.Manufacturer = strings.TrimSpace(inv.Manufacturer)
+	inv.Model = strings.TrimSpace(inv.Model)
+	return inv, nil
+}

@@ -26,3 +26,30 @@ type Snapshot struct {
 	NetworkRecv   uint64       `json:"network_recv"`
 	Disks         []DiskMetric `json:"disks"`
 }
+
+type GPUInfo struct {
+	Vendor        string `json:"vendor"`
+	Model         string `json:"model"`
+	MemoryBytes   uint64 `json:"memory_bytes"`
+	DriverVersion string `json:"driver_version"`
+}
+
+type Inventory struct {
+	CollectedAt          time.Time `json:"collected_at"`
+	Manufacturer         string    `json:"manufacturer"`
+	Model                string    `json:"model"`
+	SerialNumber         string    `json:"serial_number"`
+	DeviceType           string    `json:"device_type"`
+	OSName               string    `json:"os_name"`
+	OSVersion            string    `json:"os_version"`
+	OSBuild              string    `json:"os_build"`
+	KernelVersion        string    `json:"kernel_version"`
+	LastOSUpdate         string    `json:"last_os_update"`
+	CPUVendor            string    `json:"cpu_vendor"`
+	CPUModel             string    `json:"cpu_model"`
+	CPUPhysicalCores     int       `json:"cpu_physical_cores"`
+	CPULogicalProcessors int       `json:"cpu_logical_processors"`
+	TotalMemoryBytes     uint64    `json:"total_memory_bytes"`
+	BIOSVersion          string    `json:"bios_version"`
+	GPUs                 []GPUInfo `json:"gpus"`
+}

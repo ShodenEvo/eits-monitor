@@ -39,3 +39,5 @@ func (c *Collector) Collect(version string) (Snapshot, error) {
 		Disks: disks,
 	}, nil
 }
+
+func (c *Collector) Inventory() (Inventory, error) { return readInventory() }

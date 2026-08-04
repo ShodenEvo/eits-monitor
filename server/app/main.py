@@ -1,6 +1,7 @@
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 import hashlib
+import json
 import hmac
 import secrets
 from typing import Annotated
@@ -12,7 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pwdlib import PasswordHash
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, BigInteger, create_engine, delete, func, select, text
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, BigInteger, Text, create_engine, delete, func, select, text
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, relationship, sessionmaker
 
 
@@ -62,6 +63,30 @@ class Device(Base):
     metrics: Mapped[list['Metric']] = relationship(cascade='all, delete-orphan')
     disks: Mapped[list['DiskMetric']] = relationship(cascade='all, delete-orphan')
     port_checks: Mapped[list['PortCheck']] = relationship(cascade='all, delete-orphan')
+    inventory: Mapped['DeviceInventory | None'] = relationship(cascade='all, delete-orphan', uselist=False)
+
+
+class DeviceInventory(Base):
+    __tablename__ = 'device_inventory'
+    id: Mapped[int] = mapped_column(primary_key=True)
+    device_id: Mapped[int] = mapped_column(ForeignKey('devices.id', ondelete='CASCADE'), unique=True, index=True)
+    collected_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    manufacturer: Mapped[str] = mapped_column(String(200), default='')
+    model: Mapped[str] = mapped_column(String(200), default='')
+    serial_number: Mapped[str] = mapped_column(String(200), default='')
+    device_type: Mapped[str] = mapped_column(String(50), default='unknown')
+    os_name: Mapped[str] = mapped_column(String(200), default='')
+    os_version: Mapped[str] = mapped_column(String(100), default='')
+    os_build: Mapped[str] = mapped_column(String(100), default='')
+    kernel_version: Mapped[str] = mapped_column(String(200), default='')
+    last_os_update: Mapped[str] = mapped_column(String(200), default='')
+    cpu_vendor: Mapped[str] = mapped_column(String(100), default='')
+    cpu_model: Mapped[str] = mapped_column(String(300), default='')
+    cpu_physical_cores: Mapped[int] = mapped_column(Integer, default=0)
+    cpu_logical_processors: Mapped[int] = mapped_column(Integer, default=0)
+    total_memory_bytes: Mapped[int] = mapped_column(BigInteger, default=0)
+    bios_version: Mapped[str] = mapped_column(String(200), default='')
+    gpus_json: Mapped[str] = mapped_column(Text, default='[]')
 
 
 class Metric(Base):
@@ -205,6 +230,31 @@ class MetricsIn(BaseModel):
     def null_lists_become_empty(cls, value):
         return [] if value is None else value
 
+class GPUIn(BaseModel):
+    vendor: str = ''
+    model: str = ''
+    memory_bytes: int = 0
+    driver_version: str = ''
+
+class InventoryIn(BaseModel):
+    collected_at: datetime
+    manufacturer: str = ''
+    model: str = ''
+    serial_number: str = ''
+    device_type: str = 'unknown'
+    os_name: str = ''
+    os_version: str = ''
+    os_build: str = ''
+    kernel_version: str = ''
+    last_os_update: str = ''
+    cpu_vendor: str = ''
+    cpu_model: str = ''
+    cpu_physical_cores: int = 0
+    cpu_logical_processors: int = 0
+    total_memory_bytes: int = 0
+    bios_version: str = ''
+    gpus: list[GPUIn] = Field(default_factory=list)
+
 class PortCheckCreate(BaseModel):
     name: str = Field(min_length=1, max_length=200)
     host: str = Field(min_length=1, max_length=255)
@@ -255,6 +305,19 @@ def serialise_device(db: Session, d: Device):
             PortResult.is_up.is_(False),
         )
     ) or 0
+    inventory = d.inventory
+    inventory_data = None if not inventory else {
+        'collected_at': inventory.collected_at, 'manufacturer': inventory.manufacturer,
+        'model': inventory.model, 'serial_number': inventory.serial_number,
+        'device_type': inventory.device_type, 'os_name': inventory.os_name,
+        'os_version': inventory.os_version, 'os_build': inventory.os_build,
+        'kernel_version': inventory.kernel_version, 'last_os_update': inventory.last_os_update,
+        'cpu_vendor': inventory.cpu_vendor, 'cpu_model': inventory.cpu_model,
+        'cpu_physical_cores': inventory.cpu_physical_cores,
+        'cpu_logical_processors': inventory.cpu_logical_processors,
+        'total_memory_bytes': inventory.total_memory_bytes,
+        'bios_version': inventory.bios_version, 'gpus': json.loads(inventory.gpus_json or '[]'),
+    }
     return {
         'id': d.id, 'name': d.name, 'hostname': d.hostname, 'os': d.os,
         'architecture': d.architecture, 'agent_version': d.agent_version,
@@ -268,7 +331,7 @@ def serialise_device(db: Session, d: Device):
             'network_sent': metric.network_sent, 'network_recv': metric.network_recv,
         },
         'disks': [{'mountpoint': x.mountpoint, 'filesystem': x.filesystem, 'total': x.total, 'used': x.used, 'free': x.free, 'percent': x.percent} for x in disks],
-        'failed_ports': failed_ports,
+        'failed_ports': failed_ports, 'inventory': inventory_data,
     }
 
 
@@ -312,7 +375,7 @@ async def lifespan(app: FastAPI):
     yield
     scheduler.shutdown(wait=False)
 
-app = FastAPI(title='EITS Monitor API', version='0.3.0-alpha.1', lifespan=lifespan)
+app = FastAPI(title='EITS Monitor API', version='0.4.0-alpha.1', lifespan=lifespan)
 app.add_middleware(CORSMiddleware, allow_origins=[], allow_credentials=True, allow_methods=['*'], allow_headers=['*'])
 
 @app.get('/api/health')
@@ -345,6 +408,20 @@ def enroll(payload: EnrollRequest, db: DB):
     db.add(Device(agent_id=agent_id, agent_secret_hash=hashlib.sha256(agent_secret.encode()).hexdigest(), name=payload.name, hostname=payload.hostname, os=payload.os, architecture=payload.architecture, agent_version=payload.agent_version))
     db.commit()
     return AgentIdentity(agent_id=agent_id, agent_secret=agent_secret)
+
+@app.post('/api/agent/inventory', status_code=204)
+def ingest_inventory(payload: InventoryIn, db: DB, x_agent_id: Annotated[str, Header()], x_agent_secret: Annotated[str, Header()]):
+    device = authenticate_agent(db, x_agent_id, x_agent_secret)
+    values = payload.model_dump(exclude={'gpus'})
+    values['gpus_json'] = json.dumps([gpu.model_dump() for gpu in payload.gpus])
+    inventory = db.scalar(select(DeviceInventory).where(DeviceInventory.device_id == device.id))
+    if inventory:
+        for key, value in values.items():
+            setattr(inventory, key, value)
+    else:
+        db.add(DeviceInventory(device_id=device.id, **values))
+    db.commit()
+    return Response(status_code=204)
 
 @app.get('/api/agent/config')
 def agent_config(db: DB, x_agent_id: Annotated[str, Header()], x_agent_secret: Annotated[str, Header()]):

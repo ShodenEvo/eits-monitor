@@ -19,7 +19,7 @@ import (
 	"time"
 )
 
-const version = "0.2.0"
+const version = "0.4.0-alpha.1"
 
 type Config struct {
 	ServerURL, EnrollmentToken, DeviceName, StateFile, HostRoot, ProcRoot string
@@ -73,12 +73,39 @@ type Metrics struct {
 	Disks         []DiskMetric `json:"disks"`
 	PortResults   []PortResult `json:"port_results"`
 }
+
+type GPUInfo struct {
+	Vendor        string `json:"vendor"`
+	Model         string `json:"model"`
+	MemoryBytes   uint64 `json:"memory_bytes"`
+	DriverVersion string `json:"driver_version"`
+}
+type Inventory struct {
+	CollectedAt          time.Time `json:"collected_at"`
+	Manufacturer         string    `json:"manufacturer"`
+	Model                string    `json:"model"`
+	SerialNumber         string    `json:"serial_number"`
+	DeviceType           string    `json:"device_type"`
+	OSName               string    `json:"os_name"`
+	OSVersion            string    `json:"os_version"`
+	OSBuild              string    `json:"os_build"`
+	KernelVersion        string    `json:"kernel_version"`
+	LastOSUpdate         string    `json:"last_os_update"`
+	CPUVendor            string    `json:"cpu_vendor"`
+	CPUModel             string    `json:"cpu_model"`
+	CPUPhysicalCores     int       `json:"cpu_physical_cores"`
+	CPULogicalProcessors int       `json:"cpu_logical_processors"`
+	TotalMemoryBytes     uint64    `json:"total_memory_bytes"`
+	BIOSVersion          string    `json:"bios_version"`
+	GPUs                 []GPUInfo `json:"gpus"`
+}
 type CPUStat struct{ Idle, Total uint64 }
 type Client struct {
-	cfg      Config
-	identity Identity
-	http     *http.Client
-	lastCPU  CPUStat
+	cfg           Config
+	identity      Identity
+	http          *http.Client
+	lastCPU       CPUStat
+	lastInventory time.Time
 }
 
 func env(name, fallback string) string {
@@ -231,6 +258,79 @@ func checkPort(check PortCheck) PortResult {
 	_ = conn.Close()
 	return result
 }
+func textFile(path string) string {
+	data, _ := os.ReadFile(path)
+	return strings.TrimSpace(string(data))
+}
+func hostPath(root, path string) string { return filepath.Join(root, strings.TrimPrefix(path, "/")) }
+func collectInventory(cfg Config) Inventory {
+	inv := Inventory{CollectedAt: time.Now().UTC(), DeviceType: "physical", GPUs: []GPUInfo{}}
+	inv.Manufacturer = textFile(hostPath(cfg.HostRoot, "/sys/class/dmi/id/sys_vendor"))
+	inv.Model = textFile(hostPath(cfg.HostRoot, "/sys/class/dmi/id/product_name"))
+	inv.SerialNumber = textFile(hostPath(cfg.HostRoot, "/sys/class/dmi/id/product_serial"))
+	inv.BIOSVersion = textFile(hostPath(cfg.HostRoot, "/sys/class/dmi/id/bios_version"))
+	inv.KernelVersion = textFile(filepath.Join(cfg.ProcRoot, "sys/kernel/osrelease"))
+	data, _ := os.ReadFile(hostPath(cfg.HostRoot, "/etc/os-release"))
+	for _, line := range strings.Split(string(data), "\n") {
+		parts := strings.SplitN(line, "=", 2)
+		if len(parts) == 2 {
+			v := strings.Trim(strings.TrimSpace(parts[1]), "\"")
+			if parts[0] == "PRETTY_NAME" {
+				inv.OSName = v
+			}
+			if parts[0] == "VERSION_ID" {
+				inv.OSVersion = v
+			}
+		}
+	}
+	cpu, _ := os.ReadFile(filepath.Join(cfg.ProcRoot, "cpuinfo"))
+	physical := map[string]bool{}
+	for _, line := range strings.Split(string(cpu), "\n") {
+		parts := strings.SplitN(line, ":", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		k, v := strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1])
+		if inv.CPUModel == "" && (k == "model name" || k == "Hardware") {
+			inv.CPUModel = v
+		}
+		if inv.CPUVendor == "" && (k == "vendor_id" || k == "CPU implementer") {
+			inv.CPUVendor = v
+		}
+		if k == "physical id" {
+			physical[v] = true
+		}
+	}
+	inv.CPULogicalProcessors = runtime.NumCPU()
+	inv.CPUPhysicalCores = inv.CPULogicalProcessors
+	inv.TotalMemoryBytes, _, _ = readMemory(cfg.ProcRoot)
+	lower := strings.ToLower(inv.Manufacturer + " " + inv.Model)
+	if strings.Contains(lower, "virtual") || strings.Contains(lower, "kvm") || strings.Contains(lower, "vmware") {
+		inv.DeviceType = "virtual"
+	}
+	apt, _ := os.ReadFile(hostPath(cfg.HostRoot, "/var/log/apt/history.log"))
+	lines := strings.Split(strings.TrimSpace(string(apt)), "\n")
+	for i := len(lines) - 1; i >= 0; i-- {
+		if strings.HasPrefix(lines[i], "End-Date:") {
+			inv.LastOSUpdate = strings.TrimSpace(strings.TrimPrefix(lines[i], "End-Date:"))
+			break
+		}
+	}
+	return inv
+}
+func (c *Client) sendInventory(force bool) error {
+	if !force && time.Since(c.lastInventory) < 24*time.Hour {
+		return nil
+	}
+	inv := collectInventory(c.cfg)
+	if err := postJSON(c.http, c.cfg.ServerURL+"/api/agent/inventory", inv, c.headers(), nil); err != nil {
+		return err
+	}
+	c.lastInventory = time.Now()
+	log.Printf("inventory reported: %s %s, %s", inv.Manufacturer, inv.Model, inv.CPUModel)
+	return nil
+}
+
 func readCPU(procRoot string) (CPUStat, error) {
 	file, err := os.Open(filepath.Join(procRoot, "stat"))
 	if err != nil {
@@ -382,7 +482,13 @@ func main() {
 	client := &Client{cfg: cfg, identity: identity, http: httpClient}
 	client.lastCPU, _ = readCPU(cfg.ProcRoot)
 	log.Printf("EITS agent %s started as %s", version, identity.AgentID)
+	if err := client.sendInventory(true); err != nil {
+		log.Printf("inventory error: %v", err)
+	}
 	for {
+		if err := client.sendInventory(false); err != nil {
+			log.Printf("inventory error: %v", err)
+		}
 		agentCfg, err := client.getConfig()
 		if err != nil {
 			log.Printf("config error: %v", err)

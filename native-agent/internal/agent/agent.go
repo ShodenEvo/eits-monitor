@@ -17,13 +17,14 @@ import (
 )
 
 type Runtime struct {
-	ConfigPath string
-	Config     config.Config
-	Version    string
-	Client     *transport.Client
-	Collector  *collector.Collector
-	Queue      queue.Queue
-	Logger     *log.Logger
+	ConfigPath    string
+	Config        config.Config
+	Version       string
+	Client        *transport.Client
+	Collector     *collector.Collector
+	Queue         queue.Queue
+	Logger        *log.Logger
+	lastInventory time.Time
 }
 
 type IdentityFile struct {
@@ -105,6 +106,26 @@ func (r *Runtime) ensureIdentity() error {
 	}
 	return nil
 }
+func (r *Runtime) sendInventory(force bool) error {
+	if !force && time.Since(r.lastInventory) < 24*time.Hour {
+		return nil
+	}
+	inv, err := r.Collector.Inventory()
+	if err != nil {
+		return err
+	}
+	data, err := json.Marshal(inv)
+	if err != nil {
+		return err
+	}
+	if err := r.Client.PostInventory(data); err != nil {
+		return err
+	}
+	r.lastInventory = time.Now()
+	r.Logger.Printf("inventory reported: %s %s, %s, %d cores/%d threads, %d GPU(s)", inv.Manufacturer, inv.Model, inv.CPUModel, inv.CPUPhysicalCores, inv.CPULogicalProcessors, len(inv.GPUs))
+	return nil
+}
+
 func (r *Runtime) collectPayload() ([]byte, int, error) {
 	cfg, err := r.Client.GetConfig()
 	if err != nil {
@@ -148,6 +169,9 @@ func (r *Runtime) Once() error {
 		return err
 	}
 	r.flushQueue()
+	if err := r.sendInventory(false); err != nil {
+		r.Logger.Printf("inventory error: %v", err)
+	}
 	data, ports, err := r.collectPayload()
 	if err != nil {
 		return err
@@ -170,6 +194,9 @@ func (r *Runtime) Run(stop <-chan struct{}) error {
 		return err
 	}
 	r.Logger.Printf("EITS agent %s started as %s", r.Version, r.Client.Identity.AgentID)
+	if err := r.sendInventory(true); err != nil {
+		r.Logger.Printf("inventory error: %v", err)
+	}
 	// Prime CPU counters before first report.
 	_, _ = r.Collector.Collect(r.Version)
 	time.Sleep(time.Second)

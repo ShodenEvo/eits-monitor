@@ -128,6 +128,24 @@ func (c *Client) PostMetrics(payload []byte) error {
 	return nil
 }
 
+func (c *Client) PostInventory(payload []byte) error {
+	req, err := http.NewRequest(http.MethodPost, c.BaseURL+"/api/agent/inventory", bytes.NewReader(payload))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	c.headers(req)
+	resp, err := c.HTTP.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode/100 != 2 {
+		return decodeError(resp)
+	}
+	return nil
+}
+
 func CheckPort(check PortCheck) PortResult {
 	start := time.Now()
 	result := PortResult{CheckID: check.ID}
