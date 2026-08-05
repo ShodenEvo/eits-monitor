@@ -108,8 +108,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-          cache: npm
-          cache-dependency-path: web/package-lock.json
 
       - name: Install frontend dependencies
         run: npm install --no-audit --no-fund
@@ -124,7 +122,9 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Create CI environment
-        run: cp .env.example .env
+        run: |
+          cp .env.example .env
+          echo "EITS_LOCAL_CHECK_HOST=127.0.0.1" >> .env
 
       - name: Validate Compose configuration
         run: docker compose config
