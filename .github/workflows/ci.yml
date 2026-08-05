@@ -2,7 +2,8 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
   pull_request:
 
 permissions:
@@ -14,46 +15,81 @@ jobs:
     defaults:
       run:
         working-directory: agent
+
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-go@v5
         with:
           go-version-file: agent/go.mod
-      - run: test -z "$(gofmt -l .)"
-      - run: go vet ./...
-      - run: go test ./...
-      - run: go build ./cmd/eits-agent
+
+      - name: Check formatting
+        run: test -z "$(gofmt -l .)"
+
+      - name: Run Go vet
+        run: go vet ./...
+
+      - name: Run tests
+        run: go test ./...
+
+      - name: Build Docker agent
+        run: go build ./cmd/eits-agent
 
   native-agent:
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: native-agent
+
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-go@v5
         with:
           go-version-file: native-agent/go.mod
-      - run: test -z "$(gofmt -l .)"
-      - run: go vet ./...
-      - run: go test ./...
-      - name: Cross compile
+
+      - name: Check formatting
+        run: test -z "$(gofmt -l .)"
+
+      - name: Run Go vet
+        run: go vet ./...
+
+      - name: Run tests
+        run: go test ./...
+
+      - name: Cross-compile monitoring agent
         run: |
           mkdir -p dist
-          GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -o dist/eits-agent-windows-amd64.exe ./cmd/eits-agent
-          GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o dist/eits-agent-linux-amd64 ./cmd/eits-agent
-          GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o dist/eits-agent-linux-arm64 ./cmd/eits-agent
+          GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build \
+            -o dist/eits-agent-windows-amd64.exe \
+            ./cmd/eits-agent
+
+          GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build \
+            -o dist/eits-agent-linux-amd64 \
+            ./cmd/eits-agent
+
+          GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build \
+            -o dist/eits-agent-linux-arm64 \
+            ./cmd/eits-agent
 
   api:
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.13'
-      - run: python -m py_compile server/app/main.py
-      - run: pip install -r server/requirements.txt
-      - run: python -c "import sys; sys.path.insert(0, 'server'); import app.main"
+          python-version: "3.13"
+
+      - name: Check Python syntax
+        run: python -m py_compile server/app/main.py
+
+      - name: Install API dependencies
+        run: pip install -r server/requirements.txt
+
+      - name: Import API application
+        run: python -c "import sys; sys.path.insert(0, 'server'); import app.main"
         env:
           DATABASE_URL: sqlite+pysqlite:///:memory:
           SECRET_KEY: ci-secret-key-ci-secret-key-ci-secret-key-ci-secret-key
@@ -65,20 +101,33 @@ jobs:
     defaults:
       run:
         working-directory: web
+
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: "22"
           cache: npm
           cache-dependency-path: web/package-lock.json
-      - run: npm install --no-audit --no-fund
-      - run: npm run build
+
+      - name: Install frontend dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Build frontend
+        run: npm run build
 
   compose:
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v4
-      - run: cp .env.example .env
-      - run: docker compose config
-      - run: docker compose build
+
+      - name: Create CI environment
+        run: cp .env.example .env
+
+      - name: Validate Compose configuration
+        run: docker compose config
+
+      - name: Build containers
+        run: docker compose build
