@@ -11,10 +11,13 @@ $ErrorActionPreference = 'Stop'
 $InstallDir = 'C:\Program Files\EITS Agent'
 $DataDir = 'C:\ProgramData\EITS\Agent'
 $LogDir = Join-Path $DataDir 'logs'
-$ExeSource = Join-Path $PSScriptRoot 'eits-agent.exe'
+$ExeSource = Join-Path $PSScriptRoot 'eits-agent-windows-amd64.exe'
 $ExeTarget = Join-Path $InstallDir 'eits-agent.exe'
 $ConfigPath = Join-Path $DataDir 'config.json'
 $TaskName = 'EITS Monitoring Agent'
+$UpdateTaskName = 'EITS Agent Update'
+$UpdaterSource = Join-Path $PSScriptRoot 'update-agent.ps1'
+$UpdaterTarget = Join-Path $InstallDir 'update-agent.ps1'
 
 if (!(Test-Path -LiteralPath $ExeSource)) {
     throw "Binary not found beside installer: $ExeSource"
@@ -33,6 +36,7 @@ if ($null -ne $ExistingTask) {
 }
 
 Copy-Item -LiteralPath $ExeSource -Destination $ExeTarget -Force
+if (Test-Path $UpdaterSource) { Copy-Item $UpdaterSource $UpdaterTarget -Force }
 
 $configObject = @{
     server_url = $ServerUrl.TrimEnd('/')
@@ -78,6 +82,12 @@ Register-ScheduledTask `
     -Force | Out-Null
 
 Start-ScheduledTask -TaskName $TaskName
+
+if (Test-Path $UpdaterTarget) {
+  $UpdateAction = New-ScheduledTaskAction -Execute 'PowerShell.exe' -Argument ("-NoProfile -ExecutionPolicy Bypass -File `"$UpdaterTarget`" -Channel prerelease -Mode automatic")
+  $UpdateTrigger = New-ScheduledTaskTrigger -Daily -At 3am
+  Register-ScheduledTask -TaskName $UpdateTaskName -Action $UpdateAction -Trigger $UpdateTrigger -Settings $Settings -Principal $Principal -Force | Out-Null
+}
 Start-Sleep -Seconds 3
 
 $Task = Get-ScheduledTask -TaskName $TaskName

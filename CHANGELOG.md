@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.4.0-alpha.1] - 2026-08-04
+
+### Added
+- Device hardware and operating-system inventory endpoint.
+- Windows and Linux inventory collection for manufacturer, model, OS build, CPU topology, total RAM, BIOS, latest detected update, and GPUs.
+- Compact CPU, OS update, and total/used RAM information on overview cards.
+- Detailed Hardware & Operating System section on the device page.
+- Daily inventory refresh with an immediate scan on agent startup.
+
+
 All notable changes to EITS Monitor are documented here.
 
 ## [0.3.0-alpha.1] - 2026-08-04

@@ -1,13 +1,9 @@
-name: Release Native Agents
-
+name: Release EITS Agents
 on:
   push:
-    tags:
-      - 'v*'
-
+    tags: ['v*']
 permissions:
   contents: write
-
 jobs:
   release:
     runs-on: ubuntu-latest
@@ -16,19 +12,23 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: native-agent/go.mod
-      - name: Build agents
+      - name: Build and package
         working-directory: native-agent
         run: |
-          mkdir -p dist
-          GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o dist/eits-agent-windows-amd64.exe ./cmd/eits-agent
-          GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o dist/eits-agent-linux-amd64 ./cmd/eits-agent
-          GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o dist/eits-agent-linux-arm64 ./cmd/eits-agent
-          cp scripts/install-agent.ps1 scripts/uninstall-agent.ps1 dist/
-          cp scripts/install-agent.sh scripts/uninstall-agent.sh scripts/eits-agent.service dist/
-          cd dist
-          sha256sum * > SHA256SUMS
+          set -e
+          VERSION="${GITHUB_REF_NAME#v}"
+          mkdir -p build/windows build/linux
+          GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o build/windows/eits-agent-windows-amd64.exe ./cmd/eits-agent
+          GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o build/linux/eits-agent-linux-amd64 ./cmd/eits-agent
+          GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o build/linux/eits-agent-linux-arm64 ./cmd/eits-agent
+          cp scripts/install-agent.ps1 updater/update-agent.ps1 build/windows/
+          cp scripts/install-agent.sh updater/update-agent.sh updater/eits-agent-update.service updater/eits-agent-update.timer scripts/eits-agent.service build/linux/
+          (cd build/windows && sha256sum * > SHA256SUMS && zip -q -r "../eits-agent-windows-v${VERSION}.zip" .)
+          (cd build/linux && sha256sum * > SHA256SUMS && tar -czf "../eits-agent-linux-v${VERSION}.tar.gz" .)
       - uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
-          prerelease: true
-          files: native-agent/dist/*
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          files: |
+            native-agent/build/eits-agent-windows-*.zip
+            native-agent/build/eits-agent-linux-*.tar.gz

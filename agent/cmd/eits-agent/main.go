@@ -22,8 +22,8 @@ import (
 const version = "0.4.0-alpha.1"
 
 type Config struct {
-	ServerURL, EnrollmentToken, DeviceName, StateFile, HostRoot, ProcRoot, LocalCheckHost string
-	Interval                                                                              time.Duration
+	ServerURL, EnrollmentToken, DeviceName, StateFile, HostRoot, ProcRoot string
+	Interval                                                              time.Duration
 }
 type Identity struct {
 	AgentID     string `json:"agent_id"`
@@ -123,7 +123,7 @@ func loadConfig() Config {
 		ServerURL:       strings.TrimRight(env("EITS_SERVER_URL", "http://localhost:8000"), "/"),
 		EnrollmentToken: os.Getenv("EITS_ENROLLMENT_TOKEN"), DeviceName: env("EITS_DEVICE_NAME", "eits-agent"),
 		StateFile: env("EITS_STATE_FILE", "/data/agent.json"), HostRoot: env("EITS_HOST_ROOT", "/hostfs"),
-		ProcRoot: env("EITS_PROC_ROOT", "/hostproc"), LocalCheckHost: strings.TrimSpace(os.Getenv("EITS_LOCAL_CHECK_HOST")), Interval: interval,
+		ProcRoot: env("EITS_PROC_ROOT", "/hostproc"), Interval: interval,
 	}
 }
 func readIdentity(path string) (Identity, error) {
@@ -203,66 +203,14 @@ func (c *Client) getConfig() (AgentConfig, error) {
 	}
 	return cfg, json.NewDecoder(resp.Body).Decode(&cfg)
 }
-func isLocalCheckHost(host string) bool {
-	host = strings.TrimSpace(strings.ToLower(host))
-	return host == "" || host == "localhost" || host == "127.0.0.1" || host == "::1"
-}
-
-func appendUnique(values []string, value string) []string {
-	value = strings.TrimSpace(value)
-	if value == "" {
-		return values
-	}
-	for _, existing := range values {
-		if existing == value {
-			return values
-		}
-	}
-	return append(values, value)
-}
-
-func hostLocalAddresses(procRoot string) []string {
-	addresses := []string{"127.0.0.1"}
-	data, err := os.ReadFile(filepath.Join(procRoot, "net/fib_trie"))
-	if err != nil {
-		return addresses
-	}
-	lines := strings.Split(string(data), "\n")
-	for i, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		if !strings.HasPrefix(trimmed, "|-- ") && !strings.HasPrefix(trimmed, "+-- ") {
-			continue
-		}
-		candidate := strings.TrimSpace(strings.TrimPrefix(strings.TrimPrefix(trimmed, "|-- "), "+-- "))
-		ip := net.ParseIP(candidate)
-		if ip == nil || ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsUnspecified() || ip.To4() == nil {
-			continue
-		}
-		for j := i + 1; j < len(lines) && j <= i+3; j++ {
-			next := strings.TrimSpace(lines[j])
-			if strings.Contains(next, "host LOCAL") {
-				addresses = appendUnique(addresses, ip.String())
-				break
-			}
-			if strings.HasPrefix(next, "|-- ") || strings.HasPrefix(next, "+-- ") {
-				break
-			}
-		}
-	}
-	return addresses
-}
-
-func checkPortTarget(check PortCheck, target string) PortResult {
+func checkPort(check PortCheck) PortResult {
 	started := time.Now()
 	protocol := strings.ToLower(strings.TrimSpace(check.Protocol))
 	if protocol == "" {
 		protocol = "tcp"
 	}
+	address := net.JoinHostPort(check.Host, strconv.Itoa(check.Port))
 	timeout := time.Duration(check.TimeoutSeconds) * time.Second
-	if timeout <= 0 {
-		timeout = 3 * time.Second
-	}
-	address := net.JoinHostPort(target, strconv.Itoa(check.Port))
 	result := PortResult{CheckID: check.ID}
 
 	if protocol == "udp" {
@@ -291,6 +239,8 @@ func checkPortTarget(check PortCheck, target string) PortResult {
 			return result
 		}
 		if networkError, ok := err.(net.Error); ok && networkError.Timeout() && !check.ExpectResponse {
+			// UDP has no handshake. A timeout after a successful send is treated as
+			// reachable unless the check explicitly requires an application response.
 			result.IsUp = true
 			return result
 		}
@@ -308,40 +258,6 @@ func checkPortTarget(check PortCheck, target string) PortResult {
 	_ = conn.Close()
 	return result
 }
-
-func (c *Client) checkPort(check PortCheck) PortResult {
-	targets := []string{check.Host}
-	if isLocalCheckHost(check.Host) {
-		// Docker containers have their own loopback and interfaces. When the
-		// monitored host address is configured, always try it first. Automatic
-		// host address discovery remains as a fallback for portable deployments.
-		targets = []string{}
-		if c.cfg.LocalCheckHost != "" {
-			targets = appendUnique(targets, c.cfg.LocalCheckHost)
-		}
-		for _, target := range hostLocalAddresses(c.cfg.ProcRoot) {
-			targets = appendUnique(targets, target)
-		}
-	}
-	var errorsSeen []string
-	var totalLatency float64
-	for _, target := range targets {
-		result := checkPortTarget(check, target)
-		totalLatency += result.LatencyMS
-		if result.IsUp {
-			result.LatencyMS = totalLatency
-			log.Printf("network check %q %s/%d succeeded via %s", check.Name, strings.ToUpper(check.Protocol), check.Port, target)
-			return result
-		}
-		if result.Error != "" {
-			errorsSeen = append(errorsSeen, fmt.Sprintf("%s: %s", target, result.Error))
-		}
-	}
-	errorText := strings.Join(errorsSeen, "; ")
-	log.Printf("network check %q %s/%d failed; targets=%v; errors=%s", check.Name, strings.ToUpper(check.Protocol), check.Port, targets, errorText)
-	return PortResult{CheckID: check.ID, LatencyMS: totalLatency, Error: errorText}
-}
-
 func textFile(path string) string {
 	data, _ := os.ReadFile(path)
 	return strings.TrimSpace(string(data))
@@ -541,7 +457,7 @@ func (c *Client) collect(checks []PortCheck) Metrics {
 	sent, recv := readNetwork(c.cfg.ProcRoot)
 	metrics := Metrics{RecordedAt: time.Now().UTC(), Hostname: hostname(), OS: runtime.GOOS, Architecture: runtime.GOARCH, AgentVersion: version, CPUPercent: cpuUsage, MemoryPercent: memPercent, MemoryTotal: total, MemoryUsed: used, UptimeSeconds: readUptime(c.cfg.ProcRoot), NetworkSent: sent, NetworkRecv: recv, Disks: readDisks(c.cfg.HostRoot, c.cfg.ProcRoot), PortResults: []PortResult{}}
 	for _, check := range checks {
-		metrics.PortResults = append(metrics.PortResults, c.checkPort(check))
+		metrics.PortResults = append(metrics.PortResults, checkPort(check))
 	}
 	return metrics
 }

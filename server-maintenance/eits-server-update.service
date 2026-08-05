@@ -1,0 +1,9 @@
+[Unit]
+Description=Update EITS Monitor Server
+After=network-online.target docker.service
+Wants=network-online.target
+Requires=docker.service
+[Service]
+Type=oneshot
+EnvironmentFile=-/etc/eits-monitor/update.env
+ExecStart=/usr/local/sbin/eits-server-update

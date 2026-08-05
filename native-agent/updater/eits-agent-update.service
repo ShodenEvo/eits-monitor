@@ -1,0 +1,8 @@
+[Unit]
+Description=EITS Agent Update Check
+After=network-online.target
+Wants=network-online.target
+[Service]
+Type=oneshot
+EnvironmentFile=-/etc/eits-agent/update.env
+ExecStart=/usr/local/lib/eits-agent/update-agent.sh
