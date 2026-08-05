@@ -53,7 +53,7 @@ func main() {
 			GroupBox{Title: "Latest activity", Layout: VBox{}, Children: []Widget{
 				Label{AssignTo: &lastReport, Text: "No log data yet"},
 			}},
-			Composite{Layout: HFlow{}, Children: []Widget{
+			Composite{Layout: Flow{}, Children: []Widget{
 				PushButton{Text: "Refresh", OnClicked: refresh},
 				PushButton{Text: "Start", OnClicked: func() { action("start") }},
 				PushButton{Text: "Stop", OnClicked: func() { action("stop") }},
@@ -65,7 +65,7 @@ func main() {
 					}
 				}},
 			}},
-			Composite{Layout: HFlow{}, Children: []Widget{
+			Composite{Layout: Flow{}, Children: []Widget{
 				PushButton{Text: "Open logs", OnClicked: func() { openPath(filepath.Join(windowsapp.ProgramDataDir(), "logs")) }},
 				PushButton{Text: "Open configuration", OnClicked: func() { openPath(windowsapp.ProgramDataDir()) }},
 				PushButton{Text: "Open dashboard", OnClicked: func() {
