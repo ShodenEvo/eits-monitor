@@ -87,12 +87,19 @@ end;
 
 procedure CurStepChanged(CurStep: TSetupStep);
 var
-  DataDir, ConfigPath, JSON, AllowHTTP: String;
+  DataDir, ConfigPath, JSON, AllowHTTP, EscapedDataDir, EscapedLogDir: String;
 begin
   if CurStep = ssPostInstall then begin
     DataDir := ExpandConstant('{commonappdata}\EITS\Agent');
     ForceDirectories(DataDir);
     ForceDirectories(DataDir + '\logs');
+
+    EscapedDataDir := DataDir;
+    StringChangeEx(EscapedDataDir, '\', '\\', True);
+
+    EscapedLogDir := DataDir + '\logs';
+    StringChangeEx(EscapedLogDir, '\', '\\', True);
+
     if InsecurePage.SelectedValueIndex = 0 then AllowHTTP := 'true' else AllowHTTP := 'false';
     JSON := '{' + #13#10 +
       '  "server_url": "' + ServerPage.Values[0] + '",' + #13#10 +
@@ -102,8 +109,8 @@ begin
       '  "request_timeout_seconds": 15,' + #13#10 +
       '  "allow_insecure_http": ' + AllowHTTP + ',' + #13#10 +
       '  "skip_tls_verify": false,' + #13#10 +
-      '  "state_directory": "' + StringChangeEx(DataDir, '\', '\\', True) + '",' + #13#10 +
-      '  "log_directory": "' + StringChangeEx(DataDir + '\logs', '\', '\\', True) + '",' + #13#10 +
+      '  "state_directory": "' + EscapedDataDir + '",' + #13#10 +
+      '  "log_directory": "' + EscapedLogDir + '",' + #13#10 +
       '  "queue": {"enabled": true, "maximum_records": 2880},' + #13#10 +
       '  "logging": {"level": "info", "maximum_size_mb": 10, "maximum_files": 5}' + #13#10 +
       '}';
