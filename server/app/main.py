@@ -257,7 +257,7 @@ class InventoryIn(BaseModel):
 
 class PortCheckCreate(BaseModel):
     name: str = Field(min_length=1, max_length=200)
-    host: str = Field(min_length=1, max_length=255)
+    host: str = Field(default='127.0.0.1', min_length=1, max_length=255)
     port: int = Field(ge=1, le=65535)
     protocol: str = Field(default='tcp', pattern='^(tcp|udp)$')
     timeout_seconds: int = Field(default=3, ge=1, le=30)
@@ -477,6 +477,17 @@ def add_port_check(device_id: int, payload: PortCheckCreate, db: DB, _: Annotate
     if not db.get(Device, device_id): raise HTTPException(404, 'Device not found')
     check = PortCheck(device_id=device_id, **payload.model_dump())
     db.add(check); db.commit(); db.refresh(check)
+    return {'id': check.id, 'name': check.name, 'host': check.host, 'port': check.port, 'protocol': check.protocol, 'timeout_seconds': check.timeout_seconds, 'udp_payload': check.udp_payload, 'expect_response': check.expect_response, 'enabled': check.enabled, 'latest': None}
+
+@app.patch('/api/devices/{device_id}/port-checks/{check_id}')
+def update_port_check(device_id: int, check_id: int, payload: PortCheckCreate, db: DB, _: Annotated[User, Depends(current_user)]):
+    check = db.scalar(select(PortCheck).where(PortCheck.id == check_id, PortCheck.device_id == device_id))
+    if not check:
+        raise HTTPException(404, 'Port check not found')
+    for key, value in payload.model_dump().items():
+        setattr(check, key, value)
+    db.commit()
+    db.refresh(check)
     return {'id': check.id, 'name': check.name, 'host': check.host, 'port': check.port, 'protocol': check.protocol, 'timeout_seconds': check.timeout_seconds, 'udp_payload': check.udp_payload, 'expect_response': check.expect_response, 'enabled': check.enabled, 'latest': None}
 
 @app.delete('/api/devices/{device_id}/port-checks/{check_id}', status_code=204)

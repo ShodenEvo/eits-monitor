@@ -1,0 +1,4 @@
+services:
+  agent:
+    environment:
+      EITS_LOCAL_CHECK_HOST: ${EITS_LOCAL_CHECK_HOST:?Set EITS_LOCAL_CHECK_HOST in .env to the monitored Linux host LAN IP}

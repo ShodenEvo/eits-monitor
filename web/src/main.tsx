@@ -25,28 +25,36 @@ function DeviceView({id,back}:{id:number;back:()=>void}){
   const [d,setD]=useState<Detail|null>(null);
   const [error,setError]=useState('');
   const [savingCheck,setSavingCheck]=useState(false);
+  const [editingCheck,setEditingCheck]=useState<PortCheck|null>(null);
+  const [checkName,setCheckName]=useState('');
+  const [checkPort,setCheckPort]=useState('');
   const [protocol,setProtocol]=useState<'tcp'|'udp'>('tcp');
+  const [timeoutSeconds,setTimeoutSeconds]=useState('3');
+  const [udpPayload,setUdpPayload]=useState('');
   const [expectResponse,setExpectResponse]=useState(false);
   const load=async()=>{try{setD(await api(`/api/devices/${id}`));setError('')}catch(e){setError((e as Error).message)}};
   useEffect(()=>{load();const timer=setInterval(load,15000);return()=>clearInterval(timer)},[id]);
-  async function addPort(e:FormEvent<HTMLFormElement>){
-    e.preventDefault();
-    const form=e.currentTarget;
-    const f=new FormData(form);
-    setSavingCheck(true);setError('');
+  function resetCheckForm(){
+    setEditingCheck(null);setCheckName('');setCheckPort('');setProtocol('tcp');setTimeoutSeconds('3');setUdpPayload('');setExpectResponse(false);
+  }
+  function beginEdit(check:PortCheck){
+    setEditingCheck(check);setCheckName(check.name);setCheckPort(String(check.port));setProtocol(check.protocol);setTimeoutSeconds(String(check.timeout_seconds));setUdpPayload(check.udp_payload||'');setExpectResponse(check.expect_response);setError('');
+  }
+  async function savePort(e:FormEvent<HTMLFormElement>){
+    e.preventDefault();setSavingCheck(true);setError('');
+    const payload={name:checkName.trim(),host:'127.0.0.1',port:Number(checkPort),protocol,timeout_seconds:Number(timeoutSeconds||3),udp_payload:protocol==='udp'?udpPayload:'',expect_response:protocol==='udp'&&expectResponse};
     try{
-      const created=await api(`/api/devices/${id}/port-checks`,{method:'POST',body:JSON.stringify({
-        name:f.get('name'),host:f.get('host'),port:Number(f.get('port')),protocol,
-        timeout_seconds:Number(f.get('timeout_seconds')||3),udp_payload:String(f.get('udp_payload')||''),expect_response:expectResponse
-      })}) as PortCheck;
-      setD(current=>current?{...current,port_checks:[...current.port_checks,created].sort((a,b)=>a.name.localeCompare(b.name))}:current);
-      form.reset();setProtocol('tcp');setExpectResponse(false);
-      await load();
+      if(editingCheck){
+        await api(`/api/devices/${id}/port-checks/${editingCheck.id}`,{method:'PATCH',body:JSON.stringify(payload)});
+      }else{
+        await api(`/api/devices/${id}/port-checks`,{method:'POST',body:JSON.stringify(payload)});
+      }
+      resetCheckForm();await load();
     }catch(e){setError((e as Error).message)}finally{setSavingCheck(false)}
   }
   async function removeCheck(checkId:number){
     setD(current=>current?{...current,port_checks:current.port_checks.filter(c=>c.id!==checkId)}:current);
-    try{await api(`/api/devices/${id}/port-checks/${checkId}`,{method:'DELETE'});await load()}catch(e){setError((e as Error).message);await load()}
+    try{await api(`/api/devices/${id}/port-checks/${checkId}`,{method:'DELETE'});if(editingCheck?.id===checkId)resetCheckForm();await load()}catch(e){setError((e as Error).message);await load()}
   }
   async function saveThresholds(e:FormEvent<HTMLFormElement>){e.preventDefault();const f=new FormData(e.currentTarget);await api(`/api/devices/${id}/thresholds`,{method:'PATCH',body:JSON.stringify({warning_disk_percent:Number(f.get('warning')),critical_disk_percent:Number(f.get('critical'))})});await load()}
   if(error&&!d)return <div className="loading">{error}</div>;
@@ -57,8 +65,17 @@ function DeviceView({id,back}:{id:number;back:()=>void}){
   <section className="panel inventory-panel"><div className="panel-heading"><div><h2>Hardware & operating system</h2><p className="muted">Inventory collected {d.inventory?.collected_at?formatChartDate(d.inventory.collected_at):'not yet'}</p></div></div>{d.inventory?<div className="inventory-grid"><Info label="System" value={[d.inventory.manufacturer,d.inventory.model].filter(Boolean).join(' ')||'Unknown'}/><Info label="Device type" value={d.inventory.device_type}/><Info label="Serial number" value={d.inventory.serial_number||'Not available'}/><Info label="Operating system" value={[d.inventory.os_name,d.inventory.os_version].filter(Boolean).join(' ')}/><Info label="OS build" value={d.inventory.os_build||'Not available'}/><Info label="Latest detected update" value={d.inventory.last_os_update||'Not detected'}/><Info label="Processor" value={d.inventory.cpu_model||'Unknown'}/><Info label="CPU topology" value={`${d.inventory.cpu_physical_cores} cores / ${d.inventory.cpu_logical_processors} threads`}/><Info label="Installed RAM" value={fmtBytes(d.inventory.total_memory_bytes||d.metric?.memory_total||0)}/><Info label="BIOS" value={d.inventory.bios_version||'Not available'}/><Info label="Kernel" value={d.inventory.kernel_version||'Not available'}/><Info label="Graphics" value={d.inventory.gpus?.length?d.inventory.gpus.map(g=>g.model).join(', '):'No GPU detected'}/></div>:<p className="muted">Waiting for the agent to submit its first inventory scan.</p>}</section>
   <section className="panel"><h2>Last hour trend</h2><div className="chart"><ResponsiveContainer width="100%" height="100%"><AreaChart data={d.history}><CartesianGrid strokeDasharray="3 3"/><XAxis dataKey="recorded_at" tickFormatter={(value)=>formatChartDate(value==null?'':String(value),'time')}/><YAxis domain={[0,100]}/><Tooltip labelFormatter={(value)=>formatChartDate(value==null?'':String(value))}/><Area type="monotone" dataKey="cpu_percent" fillOpacity={.2}/><Area type="monotone" dataKey="memory_percent" fillOpacity={.1}/></AreaChart></ResponsiveContainer></div></section>
   <div className="two-col"><section className="panel"><h2>Disks</h2>{d.disks.map(x=><div className="disk" key={x.mountpoint}><div><strong>{x.mountpoint}</strong><span>{fmtBytes(x.free)} free of {fmtBytes(x.total)}</span></div><b>{x.percent.toFixed(1)}%</b><Meter value={x.percent}/></div>)}<form className="inline-form" onSubmit={saveThresholds}><input name="warning" type="number" defaultValue={d.warning_disk_percent}/><input name="critical" type="number" defaultValue={d.critical_disk_percent}/><button>Save thresholds</button></form></section>
-  <section className="panel"><div className="panel-heading"><div><h2>Network checks</h2><p className="muted">TCP connection checks and UDP probes</p></div></div>{d.port_checks.map(c=><div className="port" key={c.id}><div><strong>{c.name} <small className="protocol-badge">{c.protocol.toUpperCase()}</small></strong><span>{c.host}:{c.port}{c.protocol==='udp'&&c.expect_response?' · response required':''}</span></div><span className={`status ${c.latest?.is_up?'healthy':c.latest?'critical':'unknown'}`}>{c.latest?c.latest.is_up?'up':'down':'pending'}</span><button className="danger" onClick={()=>removeCheck(c.id)} aria-label={`Delete ${c.name}`}>×</button></div>)}
-  <form className="port-form network-check-form" onSubmit={addPort}><input name="name" placeholder="Service name" required/><input name="host" placeholder="10.0.0.4" required/><input name="port" type="number" min="1" max="65535" placeholder="443" required/><select name="protocol" value={protocol} onChange={e=>setProtocol(e.target.value as 'tcp'|'udp')}><option value="tcp">TCP</option><option value="udp">UDP</option></select><input name="timeout_seconds" type="number" min="1" max="30" defaultValue="3" title="Timeout seconds"/>{protocol==='udp'&&<><input name="udp_payload" placeholder="Optional UDP payload"/><label className="check-option"><input type="checkbox" checked={expectResponse} onChange={e=>setExpectResponse(e.target.checked)}/>Require response</label></>}<button disabled={savingCheck}>{savingCheck?'Adding…':'Add check'}</button></form>
+  <section className="panel"><div className="panel-heading"><div><h2>Network checks</h2><p className="muted">Checks run locally on this monitored device using 127.0.0.1.</p></div></div>
+  <div className="check-list-header"><span>Service</span><span>Port</span><span>Protocol</span><span>Status</span><span>Actions</span></div>
+  {d.port_checks.map(c=><div className="port check-row" key={c.id}><div><strong>{c.name}</strong>{c.protocol==='udp'&&c.expect_response&&<small>Response required</small>}</div><span className="check-port">{c.port}</span><small className="protocol-badge">{c.protocol.toUpperCase()}</small><span className={`status ${c.latest?.is_up?'healthy':c.latest?'critical':'unknown'}`}>{c.latest?c.latest.is_up?'up':'down':'pending'}</span><div className="check-actions"><button className="secondary" type="button" onClick={()=>beginEdit(c)}>Edit</button><button className="danger" type="button" onClick={()=>removeCheck(c.id)} aria-label={`Delete ${c.name}`}>×</button></div></div>)}
+  <form className="network-check-form" onSubmit={savePort}>
+    <label><span>Service name</span><input value={checkName} onChange={e=>setCheckName(e.target.value)} placeholder="OCR service" required/></label>
+    <label><span>Port</span><input value={checkPort} onChange={e=>setCheckPort(e.target.value)} type="number" min="1" max="65535" placeholder="8095" required/></label>
+    <label><span>Protocol</span><select value={protocol} onChange={e=>setProtocol(e.target.value as 'tcp'|'udp')}><option value="tcp">TCP</option><option value="udp">UDP</option></select></label>
+    <label><span>Timeout (seconds)</span><input value={timeoutSeconds} onChange={e=>setTimeoutSeconds(e.target.value)} type="number" min="1" max="30" required/></label>
+    {protocol==='udp'&&<><label className="wide-field"><span>UDP payload (optional)</span><input value={udpPayload} onChange={e=>setUdpPayload(e.target.value)} placeholder="Optional payload"/></label><label className="check-option"><input type="checkbox" checked={expectResponse} onChange={e=>setExpectResponse(e.target.checked)}/><span>Require response</span></label></>}
+    <div className="form-actions"><button disabled={savingCheck}>{savingCheck?(editingCheck?'Saving…':'Adding…'):(editingCheck?'Save changes':'Add check')}</button>{editingCheck&&<button className="secondary" type="button" onClick={resetCheckForm}>Cancel</button>}</div>
+  </form>
   {protocol==='udp'&&<p className="udp-note">UDP has no handshake. Without “Require response”, a successful send with no explicit rejection is treated as up. Use a service-specific payload and require a response for stronger validation.</p>}</section></div></div>
 }
 function App(){const [auth,setAuth]=useState<boolean|null>(null);useEffect(()=>{api('/api/auth/me').then(()=>setAuth(true)).catch(()=>setAuth(false))},[]);if(auth===null)return <div className="loading">Starting EITS Monitor…</div>;if(!auth)return <Login onLogin={()=>setAuth(true)}/>;return <Dashboard logout={async()=>{await api('/api/auth/logout',{method:'POST'});setAuth(false)}}/>}createRoot(document.getElementById('root')!).render(<React.StrictMode><App/></React.StrictMode>);
