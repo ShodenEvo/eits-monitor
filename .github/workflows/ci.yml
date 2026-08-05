@@ -91,7 +91,7 @@ jobs:
       - name: Import API application
         run: python -c "import sys; sys.path.insert(0, 'server'); import app.main"
         env:
-          DATABASE_URL: sqlite+pysqlite:///:memory:
+          DATABASE_URL: "sqlite+pysqlite:///:memory:"
           SECRET_KEY: ci-secret-key-ci-secret-key-ci-secret-key-ci-secret-key
           ADMIN_PASSWORD: ci-password
           AGENT_ENROLLMENT_TOKEN: ci-enrollment-token
