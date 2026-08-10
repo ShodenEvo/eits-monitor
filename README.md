@@ -1,17 +1,20 @@
 # EITS Monitor
 
 > [!WARNING]
-> **Alpha software.** EITS Monitor is currently intended for home labs, test environments, and community evaluation. Breaking changes may occur, and the project has not undergone an external security audit.
+> **Alpha software.** EITS Monitor is intended for home labs, test environments, and community evaluation. Breaking changes may occur, and the project has not undergone an external security audit.
 
-EITS Monitor is a lightweight, self-hosted infrastructure monitoring platform with a responsive web dashboard and cross-platform Go agents. It monitors host resources, disk capacity, uptime, and configurable TCP/UDP endpoints without exposing inbound agent ports.
+EITS Monitor is a lightweight, self-hosted infrastructure monitoring platform with a responsive web dashboard and cross-platform agents. It monitors host resources, disk capacity, uptime, and configurable TCP/UDP endpoints without exposing inbound agent ports.
 
 ## Current features
 
 - Docker Compose deployment for the server stack
 - FastAPI backend and PostgreSQL database
-- React + TypeScript responsive dashboard
+- React and TypeScript responsive dashboard
 - Docker-host monitoring agent
 - Native Windows, Linux AMD64, and Linux ARM64 agents
+- Modern .NET 8 WPF Windows Agent Manager with system-tray support
+- Native Windows Service integration with console-free controls
+- Secure Windows connection management with health checks, enrollment verification, and rollback
 - CPU, memory, disk, uptime, and basic network metrics
 - Configurable disk warning and critical thresholds
 - TCP and UDP endpoint checks
@@ -28,10 +31,9 @@ EITS Monitor is a lightweight, self-hosted infrastructure monitoring platform wi
 ## Architecture
 
 ```text
-Native Windows/Linux Agents ─┐
-                             ├── HTTPS/HTTP API ── FastAPI ── PostgreSQL
-Docker Host Agent ───────────┘                         │
-                                                      └── React/Nginx UI
+Windows / Linux agents -- HTTPS/HTTP API -- FastAPI -- PostgreSQL
+Docker host agent -----------|                  |
+                                                +-- React/Nginx UI
 ```
 
 Agents initiate outbound communication only. They enroll once using a temporary enrollment token and then use a unique device credential.
@@ -66,11 +68,7 @@ Edit `.env` and replace every placeholder value.
 docker compose up -d --build
 ```
 
-Open:
-
-```text
-http://SERVER-IP:8088
-```
+Open `http://SERVER-IP:8088` in a browser.
 
 ### 3. Check status
 
@@ -81,33 +79,45 @@ docker compose logs --tail=100 api agent web
 
 ## Native agents
 
-Source and installers are under [`native-agent/`](native-agent/).
+The portable Go collection engine and packaging resources are under [`native-agent/`](native-agent/). The Windows desktop, service host, and privileged control helper are under [`windows-agent/`](windows-agent/).
 
-Supported build targets:
+Supported targets:
 
 - Windows AMD64
 - Linux AMD64
 - Linux ARM64
 
-Build all targets:
+### Windows Agent Manager
 
-```bash
-cd native-agent
-./scripts/build.sh
+The Windows package uses a hybrid design:
+
+- `Eits.Agent.Manager.exe`: responsive .NET 8 WPF interface and system tray
+- `Eits.Agent.Service.exe`: automatic Windows Service host
+- `Eits.Agent.Control.exe`: elevated, console-free service and connection helper
+- `eits-agent-engine.exe`: portable Go metrics and server-transport engine
+
+Closing the Manager hides it in the notification area and does not stop monitoring. Only one Manager instance can run at a time. Service operations execute asynchronously through native Windows APIs, so no PowerShell or black console windows appear during normal use.
+
+The **Change connection** option accepts a server URL, enrollment token, device name, and trusted-network HTTP setting. It validates server health, protects the token from command-line exposure, waits for enrollment, and restores the previous configuration if reconnection fails.
+
+Build the Windows solution:
+
+```powershell
+dotnet build .\windows-agent\Eits.Agent.Windows.sln -c Release
 ```
 
-PowerShell:
+Build self-contained Windows applications and the other agent targets:
 
 ```powershell
 cd native-agent
 .\scripts\build.ps1
 ```
 
-Release binaries should be attached to GitHub Releases rather than committed to the repository.
+Windows clients do not require a separate .NET installation because release packages are self-contained. Use the `EITS-Agent-Setup-vX.Y.Z.exe` artifact from GitHub Releases for installation and upgrades.
 
-### Windows installation
+### Legacy PowerShell installation
 
-Run PowerShell as Administrator:
+The script-based installer remains available for development and recovery. Run PowerShell as Administrator:
 
 ```powershell
 Set-ExecutionPolicy -Scope Process Bypass
@@ -118,11 +128,7 @@ Set-ExecutionPolicy -Scope Process Bypass
   -DeviceName "SERVER-WIN01"
 ```
 
-For isolated HTTP testing only, add:
-
-```powershell
--AllowInsecureHttp
-```
+For isolated HTTP testing only, add `-AllowInsecureHttp`.
 
 ### Linux installation
 
@@ -143,7 +149,7 @@ Generic UDP checks have inherent limitations because UDP has no connection hands
 
 - Use HTTPS for production deployments.
 - Rotate enrollment tokens periodically.
-- Never commit `.env`, agent identity files, database dumps, or private keys.
+- Never commit `.env`, agent configuration, identity files, database dumps, or private keys.
 - The Docker host agent mounts host resources read-only and should be treated as trusted infrastructure.
 - EITS Monitor does not provide arbitrary remote-command execution.
 
@@ -153,13 +159,17 @@ Read [`SECURITY.md`](SECURITY.md) before exposing the application outside a trus
 
 - [Architecture](docs/architecture.md)
 - [Agent guide](docs/agents.md)
+- [Windows agent guide](docs/windows-agent.md)
+- [Windows solution](windows-agent/README.md)
 - [Troubleshooting](docs/troubleshooting.md)
 - [Roadmap](ROADMAP.md)
 - [Contributing](CONTRIBUTING.md)
 
 ## Release status
 
-Current version: **v0.3.0-alpha.1**
+Current server and portable-agent release: **v0.4.0-alpha.1**
+
+The redesigned .NET 8 Windows Agent Manager is available on `main` and is being prepared for the next prerelease. Agent update controls are intentionally reserved for a later release.
 
 See [`CHANGELOG.md`](CHANGELOG.md).
 
