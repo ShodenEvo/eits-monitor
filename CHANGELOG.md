@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Rebuilt the Windows Agent Manager as a modern, responsive .NET 8 WPF application with a system tray and single-instance behavior.
+- Added console-free C# Windows service and elevated control applications while retaining the Go collection engine.
+- Reworked connection changes with secure temporary requests, health checks, detailed enrollment errors, and rollback.
+- Updated the Windows installer and release workflow for self-contained .NET executables.
+
 ## [0.4.0-alpha.1] - 2026-08-04
 
 ### Added

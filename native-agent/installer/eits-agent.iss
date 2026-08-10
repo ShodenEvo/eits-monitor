@@ -3,7 +3,7 @@
   #define MyAppVersion "0.5.0-alpha.1"
 #endif
 #define MyAppPublisher "EITS Monitor"
-#define MyAppExeName "eits-agent-manager.exe"
+#define MyAppExeName "Eits.Agent.Manager.exe"
 
 [Setup]
 AppId={{79B62D46-22FC-4C80-8BE6-5D50BCB1FC42}
@@ -20,28 +20,32 @@ OutputBaseFilename=EITS-Agent-Setup-v{#MyAppVersion}
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
-UninstallDisplayIcon={app}\eits-agent-manager.exe
+UninstallDisplayIcon={app}\Eits.Agent.Manager.exe
 
 [Files]
-Source: "..\build\windows\eits-agent-service.exe"; DestDir: "{app}"; Flags: ignoreversion
-Source: "..\build\windows\eits-agent-manager.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\build\windows\Eits.Agent.Service.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\build\windows\Eits.Agent.Control.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\build\windows\Eits.Agent.Manager.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\build\windows\eits-agent-engine.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\build\windows\eits-agent-updater.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\build\windows\eits-agent-updater.exe.manifest"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\scripts\activate-dotnet-service.ps1"; DestDir: "{tmp}"; Flags: deleteafterinstall
 
 [Icons]
-Name: "{group}\EITS Agent Manager"; Filename: "{app}\eits-agent-manager.exe"
-Name: "{autostartup}\EITS Agent Manager"; Filename: "{app}\eits-agent-manager.exe"; Tasks: traystartup
+Name: "{group}\EITS Agent Manager"; Filename: "{app}\Eits.Agent.Manager.exe"
+Name: "{autostartup}\EITS Agent Manager"; Filename: "{app}\Eits.Agent.Manager.exe"; Tasks: traystartup
 
 [Tasks]
 Name: "traystartup"; Description: "Start EITS Agent Manager when I sign in"; Flags: checkedonce
 
 [Run]
-Filename: "{app}\eits-agent-service.exe"; Parameters: "install"; Flags: runhidden waituntilterminated
-Filename: "{app}\eits-agent-service.exe"; Parameters: "start"; Flags: runhidden waituntilterminated
-Filename: "{app}\eits-agent-manager.exe"; Description: "Open EITS Agent Manager"; Flags: nowait postinstall skipifsilent
+Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -NonInteractive -ExecutionPolicy Bypass -File &quot;{tmp}\activate-dotnet-service.ps1&quot;"; Flags: runhidden waituntilterminated
+Filename: "{sys}\sc.exe"; Parameters: "description EITSAgent &quot;Collects and reports device health to EITS Monitor.&quot;"; Flags: runhidden waituntilterminated
+Filename: "{app}\Eits.Agent.Manager.exe"; Description: "Open EITS Agent Manager"; Flags: nowait postinstall skipifsilent
 
 [UninstallRun]
-Filename: "{app}\eits-agent-service.exe"; Parameters: "stop"; Flags: runhidden waituntilterminated; RunOnceId: "StopService"
-Filename: "{app}\eits-agent-service.exe"; Parameters: "uninstall"; Flags: runhidden waituntilterminated; RunOnceId: "RemoveService"
+Filename: "{sys}\sc.exe"; Parameters: "stop EITSAgent"; Flags: runhidden waituntilterminated; RunOnceId: "StopService"
+Filename: "{sys}\sc.exe"; Parameters: "delete EITSAgent"; Flags: runhidden waituntilterminated; RunOnceId: "RemoveService"
 
 [Code]
 var
@@ -75,6 +79,16 @@ begin
   InsecurePage.Add('Allow insecure HTTP connection');
 end;
 
+function ShouldSkipPage(PageID: Integer): Boolean;
+var
+  ExistingConfig: String;
+begin
+  ExistingConfig := ExpandConstant('{commonappdata}\EITS\Agent\config.json');
+  Result := FileExists(ExistingConfig) and
+    ((PageID = ServerPage.ID) or (PageID = TokenPage.ID) or
+     (PageID = DevicePage.ID) or (PageID = InsecurePage.ID));
+end;
+
 function NextButtonClick(CurPageID: Integer): Boolean;
 begin
   Result := True;
@@ -100,8 +114,10 @@ begin
     EscapedLogDir := DataDir + '\logs';
     StringChangeEx(EscapedLogDir, '\', '\\', True);
 
-    if InsecurePage.SelectedValueIndex = 0 then AllowHTTP := 'true' else AllowHTTP := 'false';
-    JSON := '{' + #13#10 +
+    ConfigPath := DataDir + '\config.json';
+    if not FileExists(ConfigPath) then begin
+      if InsecurePage.SelectedValueIndex = 0 then AllowHTTP := 'true' else AllowHTTP := 'false';
+      JSON := '{' + #13#10 +
       '  "server_url": "' + ServerPage.Values[0] + '",' + #13#10 +
       '  "enrollment_token": "' + TokenPage.Values[0] + '",' + #13#10 +
       '  "device_name": "' + DevicePage.Values[0] + '",' + #13#10 +
@@ -114,7 +130,7 @@ begin
       '  "queue": {"enabled": true, "maximum_records": 2880},' + #13#10 +
       '  "logging": {"level": "info", "maximum_size_mb": 10, "maximum_files": 5}' + #13#10 +
       '}';
-    ConfigPath := DataDir + '\config.json';
-    SaveStringToFile(ConfigPath, JSON, False);
+      SaveStringToFile(ConfigPath, JSON, False);
+    end;
   end;
 end;

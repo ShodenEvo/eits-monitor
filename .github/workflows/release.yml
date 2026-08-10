@@ -13,6 +13,9 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: native-agent/go.mod
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
       - name: Build Windows applications
         shell: pwsh
         working-directory: native-agent
@@ -20,9 +23,12 @@ jobs:
           $Version = "${{ github.ref_name }}".TrimStart('v')
           New-Item -ItemType Directory -Force build/windows, build/installer | Out-Null
           $Ld = "-s -w -X main.version=$Version"
-          go build -trimpath -ldflags $Ld -o build/windows/eits-agent-service.exe ./cmd/eits-agent-service
-          go build -trimpath -ldflags "-H windowsgui $Ld" -o build/windows/eits-agent-manager.exe ./cmd/eits-agent-manager
+          go build -trimpath -ldflags "-H windowsgui $Ld" -o build/windows/eits-agent-engine.exe ./cmd/eits-agent
           go build -trimpath -ldflags "-H windowsgui $Ld" -o build/windows/eits-agent-updater.exe ./cmd/eits-agent-updater
+          Copy-Item assets/windows-common-controls.manifest build/windows/eits-agent-updater.exe.manifest
+          dotnet publish ../windows-agent/Eits.Agent.Manager/Eits.Agent.Manager.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o build/windows
+          dotnet publish ../windows-agent/Eits.Agent.Control/Eits.Agent.Control.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o build/windows
+          dotnet publish ../windows-agent/Eits.Agent.Service/Eits.Agent.Service.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o build/windows
       - name: Install Inno Setup
         shell: pwsh
         run: choco install innosetup --no-progress -y

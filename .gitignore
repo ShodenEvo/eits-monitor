@@ -20,6 +20,7 @@
 
 # Go
 **/bin/
+**/obj/
 **/*.exe
 **/*.test
 **/*.out
@@ -35,6 +36,7 @@ postgres-data/
 # Release binaries kept outside source control
 release-assets/
 native-agent/dist/
+native-agent/build/
 
 # IDE and OS
 .vscode/

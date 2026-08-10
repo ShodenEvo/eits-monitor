@@ -37,5 +37,7 @@ func (w *RotatingWriter) rotate() error {
 	return os.Rename(w.Path, w.Path+".1")
 }
 func Multi(path string, maxMB int64, maxFiles int) io.Writer {
-	return io.MultiWriter(os.Stdout, &RotatingWriter{Path: path, MaxBytes: maxMB * 1024 * 1024, MaxFiles: maxFiles})
+	// A Windows service has no usable stdout handle. Write to the durable file
+	// first so a console error cannot prevent service diagnostics from landing.
+	return io.MultiWriter(&RotatingWriter{Path: path, MaxBytes: maxMB * 1024 * 1024, MaxFiles: maxFiles}, os.Stdout)
 }
