@@ -186,7 +186,7 @@ func (r *Runtime) Once() error {
 	}
 	var payload metricsPayload
 	_ = json.Unmarshal(data, &payload)
-	r.Logger.Printf("reported cpu=%.1f%% memory=%.1f%% disks=%d ports=%d", payload.CPUPercent, payload.MemoryPercent, len(payload.Disks), ports)
+	r.Logger.Printf("reported cpu=%.1f%% memory=%.1f%% disks=%d ports=%d processes=%d", payload.CPUPercent, payload.MemoryPercent, len(payload.Disks), ports, len(payload.Processes))
 	return nil
 }
 func (r *Runtime) Run(stop <-chan struct{}) error {

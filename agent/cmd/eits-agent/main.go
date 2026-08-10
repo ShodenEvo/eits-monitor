@@ -57,21 +57,27 @@ type PortResult struct {
 	LatencyMS float64 `json:"latency_ms"`
 	Error     string  `json:"error"`
 }
+type ProcessInfo struct {
+	PID         int    `json:"pid"`
+	Name        string `json:"name"`
+	MemoryBytes uint64 `json:"memory_bytes"`
+}
 type Metrics struct {
-	RecordedAt    time.Time    `json:"recorded_at"`
-	Hostname      string       `json:"hostname"`
-	OS            string       `json:"os"`
-	Architecture  string       `json:"architecture"`
-	AgentVersion  string       `json:"agent_version"`
-	CPUPercent    float64      `json:"cpu_percent"`
-	MemoryPercent float64      `json:"memory_percent"`
-	MemoryTotal   uint64       `json:"memory_total"`
-	MemoryUsed    uint64       `json:"memory_used"`
-	UptimeSeconds uint64       `json:"uptime_seconds"`
-	NetworkSent   uint64       `json:"network_sent"`
-	NetworkRecv   uint64       `json:"network_recv"`
-	Disks         []DiskMetric `json:"disks"`
-	PortResults   []PortResult `json:"port_results"`
+	RecordedAt    time.Time     `json:"recorded_at"`
+	Hostname      string        `json:"hostname"`
+	OS            string        `json:"os"`
+	Architecture  string        `json:"architecture"`
+	AgentVersion  string        `json:"agent_version"`
+	CPUPercent    float64       `json:"cpu_percent"`
+	MemoryPercent float64       `json:"memory_percent"`
+	MemoryTotal   uint64        `json:"memory_total"`
+	MemoryUsed    uint64        `json:"memory_used"`
+	UptimeSeconds uint64        `json:"uptime_seconds"`
+	NetworkSent   uint64        `json:"network_sent"`
+	NetworkRecv   uint64        `json:"network_recv"`
+	Disks         []DiskMetric  `json:"disks"`
+	PortResults   []PortResult  `json:"port_results"`
+	Processes     []ProcessInfo `json:"processes"`
 }
 
 type GPUInfo struct {
@@ -416,6 +422,43 @@ func readNetwork(procRoot string) (sent, recv uint64) {
 	}
 	return
 }
+func readProcesses(procRoot string) []ProcessInfo {
+	entries, err := os.ReadDir(procRoot)
+	if err != nil {
+		return []ProcessInfo{}
+	}
+	result := []ProcessInfo{}
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		pid, err := strconv.Atoi(entry.Name())
+		if err != nil {
+			continue
+		}
+		base := filepath.Join(procRoot, entry.Name())
+		nameData, _ := os.ReadFile(filepath.Join(base, "comm"))
+		name := strings.TrimSpace(string(nameData))
+		if name == "" {
+			continue
+		}
+		var memory uint64
+		statusData, _ := os.ReadFile(filepath.Join(base, "status"))
+		for _, line := range strings.Split(string(statusData), "\n") {
+			if strings.HasPrefix(line, "VmRSS:") {
+				fields := strings.Fields(line)
+				if len(fields) > 1 {
+					value, _ := strconv.ParseUint(fields[1], 10, 64)
+					memory = value * 1024
+				}
+				break
+			}
+		}
+		result = append(result, ProcessInfo{PID: pid, Name: name, MemoryBytes: memory})
+	}
+	return result
+}
+
 func readDisks(hostRoot, procRoot string) []DiskMetric {
 	data, err := os.ReadFile(filepath.Join(procRoot, "mounts"))
 	if err != nil {
@@ -455,7 +498,7 @@ func (c *Client) collect(checks []PortCheck) Metrics {
 	c.lastCPU = currentCPU
 	total, used, memPercent := readMemory(c.cfg.ProcRoot)
 	sent, recv := readNetwork(c.cfg.ProcRoot)
-	metrics := Metrics{RecordedAt: time.Now().UTC(), Hostname: hostname(), OS: runtime.GOOS, Architecture: runtime.GOARCH, AgentVersion: version, CPUPercent: cpuUsage, MemoryPercent: memPercent, MemoryTotal: total, MemoryUsed: used, UptimeSeconds: readUptime(c.cfg.ProcRoot), NetworkSent: sent, NetworkRecv: recv, Disks: readDisks(c.cfg.HostRoot, c.cfg.ProcRoot), PortResults: []PortResult{}}
+	metrics := Metrics{RecordedAt: time.Now().UTC(), Hostname: hostname(), OS: runtime.GOOS, Architecture: runtime.GOARCH, AgentVersion: version, CPUPercent: cpuUsage, MemoryPercent: memPercent, MemoryTotal: total, MemoryUsed: used, UptimeSeconds: readUptime(c.cfg.ProcRoot), NetworkSent: sent, NetworkRecv: recv, Disks: readDisks(c.cfg.HostRoot, c.cfg.ProcRoot), PortResults: []PortResult{}, Processes: readProcesses(c.cfg.ProcRoot)}
 	for _, check := range checks {
 		metrics.PortResults = append(metrics.PortResults, checkPort(check))
 	}
@@ -497,7 +540,7 @@ func main() {
 		if err := client.send(metrics); err != nil {
 			log.Printf("upload error: %v", err)
 		} else {
-			log.Printf("reported cpu=%.1f%% memory=%.1f%% disks=%d ports=%d", metrics.CPUPercent, metrics.MemoryPercent, len(metrics.Disks), len(metrics.PortResults))
+			log.Printf("reported cpu=%.1f%% memory=%.1f%% disks=%d ports=%d processes=%d", metrics.CPUPercent, metrics.MemoryPercent, len(metrics.Disks), len(metrics.PortResults), len(metrics.Processes))
 		}
 		time.Sleep(cfg.Interval)
 	}

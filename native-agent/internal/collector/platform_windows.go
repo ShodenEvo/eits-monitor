@@ -14,13 +14,17 @@ import (
 )
 
 var (
-	kernel32                 = syscall.NewLazyDLL("kernel32.dll")
-	procGetSystemTimes       = kernel32.NewProc("GetSystemTimes")
-	procGlobalMemoryStatusEx = kernel32.NewProc("GlobalMemoryStatusEx")
-	procGetTickCount64       = kernel32.NewProc("GetTickCount64")
-	procGetLogicalDrives     = kernel32.NewProc("GetLogicalDrives")
-	procGetDriveTypeW        = kernel32.NewProc("GetDriveTypeW")
-	procGetDiskFreeSpaceExW  = kernel32.NewProc("GetDiskFreeSpaceExW")
+	kernel32                     = syscall.NewLazyDLL("kernel32.dll")
+	procGetSystemTimes           = kernel32.NewProc("GetSystemTimes")
+	procGlobalMemoryStatusEx     = kernel32.NewProc("GlobalMemoryStatusEx")
+	procGetTickCount64           = kernel32.NewProc("GetTickCount64")
+	procGetLogicalDrives         = kernel32.NewProc("GetLogicalDrives")
+	procGetDriveTypeW            = kernel32.NewProc("GetDriveTypeW")
+	procGetDiskFreeSpaceExW      = kernel32.NewProc("GetDiskFreeSpaceExW")
+	procCreateToolhelp32Snapshot = kernel32.NewProc("CreateToolhelp32Snapshot")
+	procProcess32FirstW          = kernel32.NewProc("Process32FirstW")
+	procProcess32NextW           = kernel32.NewProc("Process32NextW")
+	procCloseHandle              = kernel32.NewProc("CloseHandle")
 )
 
 type filetime struct{ low, high uint32 }
@@ -37,6 +41,19 @@ type memoryStatusEx struct {
 	TotalVirtual         uint64
 	AvailVirtual         uint64
 	AvailExtendedVirtual uint64
+}
+
+type processEntry32 struct {
+	Size            uint32
+	Usage           uint32
+	ProcessID       uint32
+	DefaultHeapID   uintptr
+	ModuleID        uint32
+	Threads         uint32
+	ParentProcessID uint32
+	PriorityBase    int32
+	Flags           uint32
+	ExeFile         [260]uint16
 }
 
 func readCPUTimes() (cpuTimes, error) {
@@ -96,6 +113,27 @@ func readDisks() ([]DiskMetric, error) {
 }
 
 func readNetwork() (uint64, uint64) { return 0, 0 }
+
+func readProcesses() []ProcessInfo {
+	const th32csSnapProcess = 0x00000002
+	handle, _, _ := procCreateToolhelp32Snapshot.Call(th32csSnapProcess, 0)
+	if handle == 0 || handle == ^uintptr(0) {
+		return []ProcessInfo{}
+	}
+	defer procCloseHandle.Call(handle)
+	entry := processEntry32{Size: uint32(unsafe.Sizeof(processEntry32{}))}
+	ok, _, _ := procProcess32FirstW.Call(handle, uintptr(unsafe.Pointer(&entry)))
+	result := []ProcessInfo{}
+	for ok != 0 {
+		name := syscall.UTF16ToString(entry.ExeFile[:])
+		if name != "" {
+			result = append(result, ProcessInfo{PID: int(entry.ProcessID), Name: name})
+		}
+		entry.Size = uint32(unsafe.Sizeof(processEntry32{}))
+		ok, _, _ = procProcess32NextW.Call(handle, uintptr(unsafe.Pointer(&entry)))
+	}
+	return result
+}
 
 func readInventory() (Inventory, error) {
 	script := `$ErrorActionPreference='SilentlyContinue';$cs=Get-CimInstance Win32_ComputerSystem;$os=Get-CimInstance Win32_OperatingSystem;$cpu=@(Get-CimInstance Win32_Processor);$bios=Get-CimInstance Win32_BIOS;$gpu=@(Get-CimInstance Win32_VideoController|ForEach-Object{[pscustomobject]@{vendor='';model=$_.Name;memory_bytes=[uint64]$_.AdapterRAM;driver_version=$_.DriverVersion}});$hotfix=Get-HotFix|Sort-Object InstalledOn -Descending|Select-Object -First 1;[pscustomobject]@{manufacturer=$cs.Manufacturer;model=$cs.Model;serial_number=$bios.SerialNumber;device_type=if($cs.Model -match 'Virtual|VMware|VirtualBox|KVM'){ 'virtual' }else{'physical'};os_name=$os.Caption;os_version=$os.Version;os_build=$os.BuildNumber;kernel_version=$os.Version;last_os_update=if($hotfix){$hotfix.HotFixID+' '+$hotfix.InstalledOn}else{''};cpu_vendor=if($cpu.Count){$cpu[0].Manufacturer}else{''};cpu_model=if($cpu.Count){$cpu[0].Name}else{''};cpu_physical_cores=($cpu|Measure-Object NumberOfCores -Sum).Sum;cpu_logical_processors=($cpu|Measure-Object NumberOfLogicalProcessors -Sum).Sum;total_memory_bytes=[uint64]$cs.TotalPhysicalMemory;bios_version=($bios.SMBIOSBIOSVersion);gpus=$gpu}|ConvertTo-Json -Depth 5 -Compress`

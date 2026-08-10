@@ -13,7 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pwdlib import PasswordHash
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, BigInteger, Text, create_engine, delete, func, select, text
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, BigInteger, Text, UniqueConstraint, create_engine, delete, func, select, text
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, relationship, sessionmaker
 
 
@@ -64,6 +64,8 @@ class Device(Base):
     disks: Mapped[list['DiskMetric']] = relationship(cascade='all, delete-orphan')
     port_checks: Mapped[list['PortCheck']] = relationship(cascade='all, delete-orphan')
     inventory: Mapped['DeviceInventory | None'] = relationship(cascade='all, delete-orphan', uselist=False)
+    running_processes: Mapped[list['RunningProcess']] = relationship(cascade='all, delete-orphan')
+    process_monitors: Mapped[list['ProcessMonitor']] = relationship(cascade='all, delete-orphan')
 
 
 class DeviceInventory(Base):
@@ -141,6 +143,26 @@ class PortResult(Base):
     error: Mapped[str] = mapped_column(String(500), default='')
 
 
+class RunningProcess(Base):
+    __tablename__ = 'running_processes'
+    __table_args__ = (UniqueConstraint('device_id', 'pid', name='uq_running_process_device_pid'),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    device_id: Mapped[int] = mapped_column(ForeignKey('devices.id', ondelete='CASCADE'), index=True)
+    collected_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    pid: Mapped[int] = mapped_column(Integer)
+    name: Mapped[str] = mapped_column(String(300), index=True)
+    memory_bytes: Mapped[int] = mapped_column(BigInteger, default=0)
+
+
+class ProcessMonitor(Base):
+    __tablename__ = 'process_monitors'
+    __table_args__ = (UniqueConstraint('device_id', 'name', name='uq_process_monitor_device_name'),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    device_id: Mapped[int] = mapped_column(ForeignKey('devices.id', ondelete='CASCADE'), index=True)
+    name: Mapped[str] = mapped_column(String(300))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+
 def db_session():
     db = SessionLocal()
     try:
@@ -209,6 +231,11 @@ class PortResultIn(BaseModel):
     latency_ms: float = 0
     error: str = ''
 
+class ProcessIn(BaseModel):
+    pid: int = Field(ge=0)
+    name: str = Field(min_length=1, max_length=300)
+    memory_bytes: int = Field(default=0, ge=0)
+
 class MetricsIn(BaseModel):
     recorded_at: datetime
     hostname: str = ''
@@ -224,8 +251,9 @@ class MetricsIn(BaseModel):
     network_recv: int = 0
     disks: list[DiskIn] = Field(default_factory=list)
     port_results: list[PortResultIn] = Field(default_factory=list)
+    processes: list[ProcessIn] = Field(default_factory=list, max_length=5000)
 
-    @field_validator('disks', 'port_results', mode='before')
+    @field_validator('disks', 'port_results', 'processes', mode='before')
     @classmethod
     def null_lists_become_empty(cls, value):
         return [] if value is None else value
@@ -272,6 +300,14 @@ class PortCheckCreate(BaseModel):
 class ThresholdUpdate(BaseModel):
     warning_disk_percent: float = Field(ge=1, le=99)
     critical_disk_percent: float = Field(ge=2, le=100)
+
+class ProcessMonitorCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=300)
+
+    @field_validator('name')
+    @classmethod
+    def clean_name(cls, value):
+        return value.strip()
 
 
 def device_status(device: Device, latest_disks: list[DiskMetric]) -> str:
@@ -439,6 +475,17 @@ def ingest(payload: MetricsIn, db: DB, x_agent_id: Annotated[str, Header()], x_a
     db.add_all([DiskMetric(device_id=device.id, recorded_at=payload.recorded_at, **d.model_dump()) for d in payload.disks])
     valid_ids = set(db.scalars(select(PortCheck.id).where(PortCheck.device_id == device.id)))
     db.add_all([PortResult(device_id=device.id, recorded_at=payload.recorded_at, **r.model_dump()) for r in payload.port_results if r.check_id in valid_ids])
+    # Process inventory is latest-state data, not time-series data. Replace it
+    # atomically on each report to prevent unbounded database growth.
+    db.execute(delete(RunningProcess).where(RunningProcess.device_id == device.id))
+    seen_pids = set()
+    processes = []
+    for process in payload.processes:
+        if process.pid in seen_pids:
+            continue
+        seen_pids.add(process.pid)
+        processes.append(RunningProcess(device_id=device.id, collected_at=payload.recorded_at, **process.model_dump()))
+    db.add_all(processes)
     db.commit()
     return {'ok': True}
 
@@ -460,7 +507,29 @@ def get_device(device_id: int, db: DB, _: Annotated[User, Depends(current_user)]
         result['port_checks'].append({'id': c.id, 'name': c.name, 'host': c.host, 'port': c.port, 'protocol': c.protocol, 'timeout_seconds': c.timeout_seconds, 'udp_payload': c.udp_payload, 'expect_response': c.expect_response, 'enabled': c.enabled, 'latest': None if not latest else {'recorded_at': latest.recorded_at, 'is_up': latest.is_up, 'latency_ms': latest.latency_ms, 'error': latest.error}})
     history = list(db.scalars(select(Metric).where(Metric.device_id == device.id).order_by(Metric.recorded_at.desc()).limit(120)))
     result['history'] = [{'recorded_at': m.recorded_at, 'cpu_percent': m.cpu_percent, 'memory_percent': m.memory_percent} for m in reversed(history)]
+    running = list(db.scalars(select(RunningProcess).where(RunningProcess.device_id == device.id).order_by(RunningProcess.name, RunningProcess.pid)))
+    monitors = list(db.scalars(select(ProcessMonitor).where(ProcessMonitor.device_id == device.id).order_by(ProcessMonitor.name)))
+    running_names = {process.name.casefold() for process in running}
+    result['processes'] = [{'pid': process.pid, 'name': process.name, 'memory_bytes': process.memory_bytes, 'collected_at': process.collected_at} for process in running]
+    result['process_monitors'] = [{'id': monitor.id, 'name': monitor.name, 'running': monitor.name.casefold() in running_names} for monitor in monitors]
     return result
+
+@app.delete('/api/devices/{device_id}', status_code=204)
+def delete_device(device_id: int, db: DB, _: Annotated[User, Depends(current_user)]):
+    device = db.get(Device, device_id)
+    if not device:
+        raise HTTPException(404, 'Device not found')
+    check_ids = select(PortCheck.id).where(PortCheck.device_id == device_id)
+    db.execute(delete(PortResult).where(PortResult.device_id == device_id))
+    db.execute(delete(PortCheck).where(PortCheck.id.in_(check_ids)))
+    db.execute(delete(RunningProcess).where(RunningProcess.device_id == device_id))
+    db.execute(delete(ProcessMonitor).where(ProcessMonitor.device_id == device_id))
+    db.execute(delete(DiskMetric).where(DiskMetric.device_id == device_id))
+    db.execute(delete(Metric).where(Metric.device_id == device_id))
+    db.execute(delete(DeviceInventory).where(DeviceInventory.device_id == device_id))
+    db.execute(delete(Device).where(Device.id == device_id))
+    db.commit()
+    return Response(status_code=204)
 
 @app.patch('/api/devices/{device_id}/thresholds')
 def thresholds(device_id: int, payload: ThresholdUpdate, db: DB, _: Annotated[User, Depends(current_user)]):
@@ -490,3 +559,26 @@ def delete_port_check(device_id: int, check_id: int, db: DB, _: Annotated[User, 
     db.execute(delete(PortResult).where(PortResult.check_id == check.id))
     db.delete(check)
     db.commit()
+
+@app.post('/api/devices/{device_id}/process-monitors', status_code=201)
+def add_process_monitor(device_id: int, payload: ProcessMonitorCreate, db: DB, _: Annotated[User, Depends(current_user)]):
+    if not db.get(Device, device_id):
+        raise HTTPException(404, 'Device not found')
+    existing = db.scalar(select(ProcessMonitor).where(ProcessMonitor.device_id == device_id, func.lower(ProcessMonitor.name) == payload.name.lower()))
+    if existing:
+        raise HTTPException(409, 'Process is already monitored')
+    monitor = ProcessMonitor(device_id=device_id, name=payload.name)
+    db.add(monitor)
+    db.commit()
+    db.refresh(monitor)
+    running = db.scalar(select(func.count()).select_from(RunningProcess).where(RunningProcess.device_id == device_id, func.lower(RunningProcess.name) == payload.name.lower())) or 0
+    return {'id': monitor.id, 'name': monitor.name, 'running': running > 0}
+
+@app.delete('/api/devices/{device_id}/process-monitors/{monitor_id}', status_code=204)
+def delete_process_monitor(device_id: int, monitor_id: int, db: DB, _: Annotated[User, Depends(current_user)]):
+    monitor = db.scalar(select(ProcessMonitor).where(ProcessMonitor.id == monitor_id, ProcessMonitor.device_id == device_id))
+    if not monitor:
+        raise HTTPException(404, 'Process monitor not found')
+    db.delete(monitor)
+    db.commit()
+    return Response(status_code=204)

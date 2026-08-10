@@ -31,12 +31,13 @@ func (c *Collector) Collect(version string) (Snapshot, error) {
 		return Snapshot{}, err
 	}
 	sent, recv := readNetwork()
+	processes := readProcesses()
 	return Snapshot{
 		RecordedAt: time.Now().UTC(), Hostname: host, OS: runtime.GOOS,
 		Architecture: runtime.GOARCH, AgentVersion: version, CPUPercent: cpu,
 		MemoryPercent: memPercent, MemoryTotal: total, MemoryUsed: used,
 		UptimeSeconds: uptime, NetworkSent: sent, NetworkRecv: recv,
-		Disks: disks,
+		Disks: disks, Processes: processes,
 	}, nil
 }
 

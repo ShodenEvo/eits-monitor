@@ -47,3 +47,11 @@ Linux:
 /var/lib/eits-agent/metrics.queue
 /var/log/eits-agent/eits-agent.log
 ```
+
+## Process monitoring
+
+Agents submit a bounded latest-state inventory of running process names, process IDs, and memory usage where the operating system exposes it. The dashboard does not retain every process snapshot as historical data; each report replaces the previous inventory to control database growth.
+
+From a device page, search the current process list and select the process names that must remain running. Selected monitors persist independently from the current inventory and display **Running** or **Not running** after each agent report.
+
+Removing a device from the dashboard permanently deletes its credentials, metrics, inventory, port checks, and process monitoring data. Uninstall or disconnect the agent first when retiring a server. An agent whose device record was removed will be rejected until it is enrolled again.

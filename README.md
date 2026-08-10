@@ -15,6 +15,9 @@ EITS Monitor is a lightweight, self-hosted infrastructure monitoring platform wi
 - Modern .NET 8 WPF Windows Agent Manager with system-tray support
 - Native Windows Service integration with console-free controls
 - Secure Windows connection management with health checks, enrollment verification, and rollback
+- Server removal with associated monitoring-history cleanup
+- Searchable and paginated network checks
+- Running-process inventory and selected process availability monitoring
 - CPU, memory, disk, uptime, and basic network metrics
 - Configurable disk warning and critical thresholds
 - TCP and UDP endpoint checks

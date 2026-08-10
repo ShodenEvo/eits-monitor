@@ -139,6 +139,41 @@ func readNetwork() (uint64, uint64) {
 	return sent, recv
 }
 
+func readProcesses() []ProcessInfo {
+	entries, err := os.ReadDir("/proc")
+	if err != nil {
+		return []ProcessInfo{}
+	}
+	result := []ProcessInfo{}
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		pid, err := strconv.Atoi(entry.Name())
+		if err != nil {
+			continue
+		}
+		name := readText(filepath.Join("/proc", entry.Name(), "comm"))
+		if name == "" {
+			continue
+		}
+		var memory uint64
+		status, _ := os.ReadFile(filepath.Join("/proc", entry.Name(), "status"))
+		for _, line := range strings.Split(string(status), "\n") {
+			if strings.HasPrefix(line, "VmRSS:") {
+				fields := strings.Fields(line)
+				if len(fields) > 1 {
+					value, _ := strconv.ParseUint(fields[1], 10, 64)
+					memory = value * 1024
+				}
+				break
+			}
+		}
+		result = append(result, ProcessInfo{PID: pid, Name: name, MemoryBytes: memory})
+	}
+	return result
+}
+
 func readText(path string) string {
 	data, _ := os.ReadFile(path)
 	return strings.TrimSpace(string(data))

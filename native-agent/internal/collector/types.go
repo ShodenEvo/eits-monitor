@@ -11,20 +11,27 @@ type DiskMetric struct {
 	Percent    float64 `json:"percent"`
 }
 
+type ProcessInfo struct {
+	PID         int    `json:"pid"`
+	Name        string `json:"name"`
+	MemoryBytes uint64 `json:"memory_bytes"`
+}
+
 type Snapshot struct {
-	RecordedAt    time.Time    `json:"recorded_at"`
-	Hostname      string       `json:"hostname"`
-	OS            string       `json:"os"`
-	Architecture  string       `json:"architecture"`
-	AgentVersion  string       `json:"agent_version"`
-	CPUPercent    float64      `json:"cpu_percent"`
-	MemoryPercent float64      `json:"memory_percent"`
-	MemoryTotal   uint64       `json:"memory_total"`
-	MemoryUsed    uint64       `json:"memory_used"`
-	UptimeSeconds uint64       `json:"uptime_seconds"`
-	NetworkSent   uint64       `json:"network_sent"`
-	NetworkRecv   uint64       `json:"network_recv"`
-	Disks         []DiskMetric `json:"disks"`
+	RecordedAt    time.Time     `json:"recorded_at"`
+	Hostname      string        `json:"hostname"`
+	OS            string        `json:"os"`
+	Architecture  string        `json:"architecture"`
+	AgentVersion  string        `json:"agent_version"`
+	CPUPercent    float64       `json:"cpu_percent"`
+	MemoryPercent float64       `json:"memory_percent"`
+	MemoryTotal   uint64        `json:"memory_total"`
+	MemoryUsed    uint64        `json:"memory_used"`
+	UptimeSeconds uint64        `json:"uptime_seconds"`
+	NetworkSent   uint64        `json:"network_sent"`
+	NetworkRecv   uint64        `json:"network_recv"`
+	Disks         []DiskMetric  `json:"disks"`
+	Processes     []ProcessInfo `json:"processes"`
 }
 
 type GPUInfo struct {
