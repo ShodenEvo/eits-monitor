@@ -97,7 +97,7 @@ func unzipFile(src, dst string) error {
 
 func main() {
 	interactive := flag.Bool("interactive", false, "show dialogs")
-	manifestURL := flag.String("manifest", "https://eits.myds.me/downloads/agent/windows/update.json", "update manifest URL")
+	manifestURL := flag.String("manifest", "https://monitor.example.com/downloads/agent/windows/update.json", "update manifest URL")
 	flag.Parse()
 	notify := func(title, msg string, err bool) {
 		if *interactive {

@@ -36,7 +36,7 @@ Copy the `windows` package to the target machine, open an elevated PowerShell pr
 ```powershell
 Set-ExecutionPolicy -Scope Process Bypass
 .\install-agent.ps1 `
-  -ServerUrl "http://10.0.0.4:8088" `
+  -ServerUrl "http://192.0.2.10:8088" `
   -EnrollmentToken "YOUR_ENROLLMENT_TOKEN" `
   -DeviceName "WINDOWS-PC01" `
   -AllowInsecureHttp
@@ -68,7 +68,7 @@ Uninstall:
 
 ```bash
 sudo ./install-agent.sh \
-  http://10.0.0.4:8088 \
+  http://192.0.2.10:8088 \
   YOUR_ENROLLMENT_TOKEN \
   SERVER-LINUX01 \
   --allow-insecure-http

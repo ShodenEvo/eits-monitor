@@ -1,5 +1,5 @@
 {
-  "server_url": "http://10.0.0.4:8088",
+  "server_url": "https://monitor.example.com",
   "enrollment_token": "REPLACE_WITH_ENROLLMENT_TOKEN",
   "device_name": "WINDOWS-PC01",
   "collection_interval_seconds": 30,

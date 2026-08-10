@@ -19,7 +19,7 @@ The manager refreshes automatically every 10 seconds. Starting, stopping, or res
 
 Service operations run outside the interface thread through the Windows Service API and have a 25-second timeout. No PowerShell or console window is used; Windows still displays its standard UAC consent prompt. **Change connection** accepts a new server URL, enrollment token, and device name. The token is passed through a short-lived request file instead of command-line arguments. The helper checks server health, backs up the configuration and identity, restarts the service, waits for enrollment, and rolls back on failure. Reconnecting may leave the previous device record on the old server for an administrator to remove.
 
-Before changing protected files, the Manager checks `<server URL>/api/health`. When using the default Compose web port on a trusted HTTP network, include it in the address, for example `http://10.0.0.4:8088`, and enable **Allow insecure HTTP**.
+Before changing protected files, the Manager checks `<server URL>/api/health`. When using the default Compose web port on a trusted HTTP network, include it in the address, for example `http://192.0.2.10:8088`, and enable **Allow insecure HTTP**.
 
 The Manager provides a notification-area icon. Closing its window hides the Manager to the system tray without stopping monitoring. The tray menu can open or exit the Manager and start, stop, or restart the service.
 
@@ -27,14 +27,14 @@ The Manager provides a notification-area icon. Closing its window hides the Mana
 
 The reserved updater implementation checks this manifest by default. It is not currently exposed as an Agent Manager option:
 
-`https://eits.myds.me/downloads/agent/windows/update.json`
+`https://monitor.example.com/downloads/agent/windows/update.json`
 
 Example:
 
 ```json
 {
   "version": "0.5.0-alpha.1",
-  "url": "https://eits.myds.me/downloads/agent/windows/eits-agent-update-v0.5.0-alpha.1.zip",
+  "url": "https://monitor.example.com/downloads/agent/windows/eits-agent-update-v0.5.0-alpha.1.zip",
   "sha256": "REPLACE_WITH_PACKAGE_SHA256",
   "mandatory": false,
   "release_notes": "Windows service, manager interface, and native updater."

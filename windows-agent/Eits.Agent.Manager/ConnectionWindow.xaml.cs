@@ -33,7 +33,7 @@ public partial class ConnectionWindow : Window
             (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps) ||
             string.IsNullOrWhiteSpace(uri.Host))
         {
-            MessageBox.Show("Enter a server address such as https://server.example or http://10.0.0.4:8088.", Title, MessageBoxButton.OK, MessageBoxImage.Warning);
+            MessageBox.Show("Enter a server address such as https://monitor.example.com or http://192.0.2.10:8088.", Title, MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
         if (uri.Scheme == Uri.UriSchemeHttp && !allowHttp)

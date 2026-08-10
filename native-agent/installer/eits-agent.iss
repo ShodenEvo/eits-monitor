@@ -60,7 +60,7 @@ begin
     'EITS Server', 'Connect this computer to your EITS Monitor server.',
     'Enter the server address used by the monitoring agent.');
   ServerPage.Add('Server URL:', False);
-  ServerPage.Values[0] := 'https://eits.myds.me';
+  ServerPage.Values[0] := 'https://monitor.example.com';
 
   TokenPage := CreateInputQueryPage(ServerPage.ID,
     'Agent registration', 'Enter the enrollment token.',
