@@ -26,7 +26,7 @@ CloseApplications=force
 RestartApplications=no
 
 [Files]
-Source: "..\build\windows\Eits.Agent.Service.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\build\windows\Eits.Agent.Service.exe"; DestDir: "{app}"; Flags: ignoreversion; BeforeInstall: EnsureAgentBinaryReady
 Source: "..\build\windows\Eits.Agent.Control.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\build\windows\Eits.Agent.Manager.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\build\windows\eits-agent-engine.exe"; DestDir: "{app}"; Flags: ignoreversion
@@ -61,6 +61,13 @@ Filename: "{sys}\sc.exe"; Parameters: "stop EITSAgent"; Flags: runhidden waitunt
 Filename: "{sys}\sc.exe"; Parameters: "delete EITSAgent"; Flags: runhidden waituntilterminated; RunOnceId: "RemoveService"
 
 [Code]
+function CreateFile(FileName: String; DesiredAccess, ShareMode: Cardinal;
+  SecurityAttributes: Integer; CreationDisposition, FlagsAndAttributes: Cardinal;
+  TemplateFile: Integer): Integer;
+  external 'CreateFileW@kernel32.dll stdcall';
+function CloseHandle(Handle: Integer): Boolean;
+  external 'CloseHandle@kernel32.dll stdcall';
+
 var
   ServerPage: TInputQueryWizardPage;
   TokenPage: TInputQueryWizardPage;
@@ -182,6 +189,49 @@ begin
   end;
 end;
 
+function IsFileAvailable(FileName: String): Boolean;
+var
+  Handle: Integer;
+begin
+  Result := not FileExists(FileName);
+  if Result then Exit;
+  Handle := CreateFile(FileName, $80000000, 0, 0, 3, $80, 0);
+  Result := Handle <> -1;
+  if Result then CloseHandle(Handle);
+end;
+
+function WaitForFileAvailability(FileName: String; Attempts: Integer): Boolean;
+var
+  Index: Integer;
+begin
+  Result := IsFileAvailable(FileName);
+  Index := 0;
+  while (not Result) and (Index < Attempts) do begin
+    Sleep(500);
+    Index := Index + 1;
+    Result := IsFileAvailable(FileName);
+  end;
+end;
+
+procedure StopAgentProcesses;
+var
+  ResultCode: Integer;
+begin
+  Exec(ExpandConstant('{sys}\taskkill.exe'), '/IM Eits.Agent.Manager.exe /T /F', '',
+    SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Exec(ExpandConstant('{sys}\taskkill.exe'), '/IM eits-agent-updater.exe /T /F', '',
+    SW_HIDE, ewWaitUntilTerminated, ResultCode);
+end;
+
+procedure EnsureAgentBinaryReady;
+var
+  ServiceBinary: String;
+begin
+  ServiceBinary := ExpandConstant('{app}\Eits.Agent.Service.exe');
+  if not WaitForFileAvailability(ServiceBinary, 20) then
+    RaiseException('The EITS Agent service executable is still in use. Setup rechecked the service process for 10 seconds and cannot safely replace the file.');
+end;
+
 function PrepareToInstall(var NeedsRestart: Boolean): String;
 var
   HelperPath, ResultPath, Detail: String;
@@ -208,6 +258,18 @@ begin
     Exec(ExpandConstant('{sys}\sc.exe'), 'stop EITSAgent', '', SW_HIDE,
       ewWaitUntilTerminated, ResultCode);
     Sleep(5000);
+  end;
+
+  StopAgentProcesses;
+  if (Result = '') and
+    (not WaitForFileAvailability(ExpandConstant('{app}\Eits.Agent.Service.exe'), 60)) then begin
+    { The service can report Stopped shortly before its process releases the executable. }
+    Exec(ExpandConstant('{sys}\taskkill.exe'), '/IM Eits.Agent.Service.exe /T /F', '',
+      SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    Exec(ExpandConstant('{sys}\taskkill.exe'), '/IM eits-agent-engine.exe /T /F', '',
+      SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    if not WaitForFileAvailability(ExpandConstant('{app}\Eits.Agent.Service.exe'), 20) then
+      Result := 'Setup stopped the EITSAgent service, but Windows has not released Eits.Agent.Service.exe after repeated checks. Close any security scanner or process using the file, then run Setup again.';
   end;
 
   DeleteFile(ResultPath);

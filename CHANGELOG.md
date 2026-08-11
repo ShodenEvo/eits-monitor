@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+## [0.5.0-alpha.12] - 2026-08-11
+
+### Fixed
+
+- Corrected main-window card alignment and Quick Access content overflow at different window sizes.
+- Increased the connection-dialog working area for high-DPI Windows display scaling.
+- Kept accent-button text readable across normal, hover, pressed, and disabled states.
+- Rechecked exclusive access to the service executable after shutdown and immediately before replacement.
+- Added bounded cleanup of lingering EITS service, engine, manager, and updater processes during upgrades.
+
 ## [0.5.0-alpha.11] - 2026-08-11
 
 ### Fixed

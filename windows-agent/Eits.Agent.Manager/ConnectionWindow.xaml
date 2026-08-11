@@ -1,7 +1,7 @@
 <Window x:Class="Eits.Agent.Manager.ConnectionWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Configure uplink" Icon="Assets/eits-agent-icon.ico" Width="570" Height="520"
+        Title="Configure uplink" Icon="Assets/eits-agent-icon.ico" Width="600" Height="620" MinHeight="620"
         WindowStartupLocation="CenterOwner" ResizeMode="NoResize" Background="#071321" FontFamily="Segoe UI">
     <Grid>
         <Grid.Background><RadialGradientBrush Center="0.1,0" RadiusX="1" RadiusY="1"><GradientStop Color="#173650" Offset="0"/><GradientStop Color="#071321" Offset="0.58"/><GradientStop Color="#040B14" Offset="1"/></RadialGradientBrush></Grid.Background>

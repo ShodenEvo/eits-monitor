@@ -52,9 +52,23 @@
             </Setter>
         </Style>
         <Style x:Key="AccentButton" TargetType="Button" BasedOn="{StaticResource TechButton}">
-            <Setter Property="Foreground" Value="#03191C"/>
+            <Setter Property="Foreground" Value="#06252A"/>
             <Setter Property="Background" Value="{StaticResource AccentBrush}"/>
             <Setter Property="BorderBrush" Value="{StaticResource AccentBrush}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Shell" CornerRadius="9" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Shell" Property="Background" Value="#75F2E5"/><Setter TargetName="Shell" Property="BorderBrush" Value="#B8FFF7"/></Trigger>
+                            <Trigger Property="IsPressed" Value="True"><Setter TargetName="Shell" Property="Background" Value="#2DCBBA"/></Trigger>
+                            <Trigger Property="IsEnabled" Value="False"><Setter TargetName="Shell" Property="Opacity" Value="0.42"/></Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
         <Style x:Key="TechTextBox" TargetType="TextBox">
             <Setter Property="Foreground" Value="{StaticResource PrimaryTextBrush}"/>
