@@ -65,19 +65,29 @@ public static class ElevatedControl
     public static async Task RunAsync(params string[] args)
     {
         var helper = Path.Combine(AgentPaths.InstallDirectory, "Eits.Agent.Control.exe");
+        if (!File.Exists(helper)) throw new FileNotFoundException("The EITS control helper is not installed.", helper);
+        var resultPath = Path.Combine(Path.GetTempPath(), $"eits-control-{Guid.NewGuid():N}.result");
         var start = new ProcessStartInfo(helper) { UseShellExecute = true, Verb = "runas", WindowStyle = ProcessWindowStyle.Hidden };
         foreach (var arg in args) start.ArgumentList.Add(arg);
-        using var process = Process.Start(start) ?? throw new InvalidOperationException("Unable to start the elevated control helper.");
-        await process.WaitForExitAsync();
-        if (process.ExitCode != 0)
+        start.ArgumentList.Add(resultPath);
+        try
         {
-            if (args.Length > 2 && File.Exists(args[2]))
+            using var process = Process.Start(start) ?? throw new InvalidOperationException("Unable to start the elevated control helper.");
+            await process.WaitForExitAsync();
+            if (process.ExitCode != 0)
             {
-                var detail = await File.ReadAllTextAsync(args[2]);
-                if (!string.IsNullOrWhiteSpace(detail)) throw new InvalidOperationException(detail);
+                if (File.Exists(resultPath))
+                {
+                    var detail = await File.ReadAllTextAsync(resultPath);
+                    if (!string.IsNullOrWhiteSpace(detail)) throw new InvalidOperationException(detail);
+                }
+                var lastLog = AgentStatusReader.ReadLastLine(AgentPaths.LogFile);
+                throw new InvalidOperationException(string.IsNullOrWhiteSpace(lastLog)
+                    ? "The requested operation failed and no agent log has been written yet. Check that the EITSAgent Windows service is installed and that eits-agent-engine.exe exists in the install folder."
+                    : $"The requested operation failed. Latest agent log: {lastLog}");
             }
-            throw new InvalidOperationException("The requested operation failed. Review the latest agent log.");
         }
+        finally { try { File.Delete(resultPath); } catch { } }
     }
 
     public static async Task ReconfigureAsync(ConnectionRequest request)
@@ -85,21 +95,14 @@ public static class ElevatedControl
         Directory.CreateDirectory(AgentPaths.DataDirectory);
         var id = Guid.NewGuid().ToString("N");
         var requestPath = Path.Combine(Path.GetTempPath(), $"eits-connection-{id}.json");
-        var resultPath = requestPath + ".result";
         await File.WriteAllTextAsync(requestPath, JsonSerializer.Serialize(request, AgentConfig.JsonOptions));
         try
         {
-            await RunAsync("reconfigure", requestPath, resultPath);
-            if (File.Exists(resultPath))
-            {
-                var message = await File.ReadAllTextAsync(resultPath);
-                if (!string.Equals(message.Trim(), "OK", StringComparison.OrdinalIgnoreCase)) throw new InvalidOperationException(message);
-            }
+            await RunAsync("reconfigure", requestPath);
         }
         finally
         {
             try { File.Delete(requestPath); } catch { }
-            try { File.Delete(resultPath); } catch { }
         }
     }
 }

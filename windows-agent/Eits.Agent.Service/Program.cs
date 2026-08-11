@@ -18,8 +18,8 @@ sealed class AgentService : ServiceBase
     Process? engine;
 
     public AgentService() { ServiceName = "EITSAgent"; CanStop = true; CanShutdown = true; AutoLog = true; }
-    protected override void OnStart(string[] args) { cancellation = new(); _ = Task.Run(() => SuperviseAsync(cancellation.Token)); }
-    protected override void OnStop() { cancellation?.Cancel(); StopEngine(); }
+    protected override void OnStart(string[] args) { WriteHostLog("service host starting"); cancellation = new(); _ = Task.Run(() => SuperviseAsync(cancellation.Token)); }
+    protected override void OnStop() { WriteHostLog("service host stopping"); cancellation?.Cancel(); StopEngine(); }
     protected override void OnShutdown() => OnStop();
     public void StartInteractive() => OnStart([]);
     public void StopInteractive() => OnStop();
@@ -31,6 +31,7 @@ sealed class AgentService : ServiceBase
             try
             {
                 var executable = Path.Combine(AppContext.BaseDirectory, "eits-agent-engine.exe");
+                if (!File.Exists(executable)) throw new FileNotFoundException("Agent engine executable was not found.", executable);
                 var start = new ProcessStartInfo(executable) { UseShellExecute = false, CreateNoWindow = true };
                 start.ArgumentList.Add("run"); start.ArgumentList.Add("-config"); start.ArgumentList.Add(AgentPaths.ConfigFile);
                 var process = Process.Start(start) ?? throw new InvalidOperationException("Unable to start the agent engine.");

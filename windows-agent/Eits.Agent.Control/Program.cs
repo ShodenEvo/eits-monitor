@@ -9,7 +9,9 @@ static class ControlProgram
 {
     public static async Task<int> RunAsync(string[] args)
     {
-        string? resultPath = args.Length > 2 ? args[2] : null;
+        string? resultPath = args.Length > 0 && args[0].Equals("reconfigure", StringComparison.OrdinalIgnoreCase)
+            ? args.ElementAtOrDefault(2)
+            : args.ElementAtOrDefault(1);
         try
         {
             if (args.Length == 0) throw new ArgumentException("No operation was specified.");
@@ -50,6 +52,9 @@ static class ControlProgram
             if (service.Status is not ServiceControllerStatus.StopPending) service.Stop();
             service.WaitForStatus(ServiceControllerStatus.Stopped, TimeSpan.FromSeconds(25));
         }
+        service.Refresh();
+        var expected = start ? ServiceControllerStatus.Running : ServiceControllerStatus.Stopped;
+        if (service.Status != expected) throw new InvalidOperationException($"Windows service is {service.Status}; expected {expected}.");
     }
 
     static async Task ReconfigureAsync(string requestPath)
