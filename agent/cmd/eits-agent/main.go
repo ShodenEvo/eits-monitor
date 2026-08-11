@@ -460,9 +460,23 @@ func readProcesses(procRoot string) []ProcessInfo {
 }
 
 func readDisks(hostRoot, procRoot string) []DiskMetric {
-	data, err := os.ReadFile(filepath.Join(procRoot, "mounts"))
+	// With host PID access, PID 1 exposes the host mount namespace. Reading the
+	// proc root's own mounts from inside Docker would instead include container
+	// bind mounts such as /etc/hostname and omit host filesystems such as ZFS.
+	data, err := os.ReadFile(filepath.Join(procRoot, "1", "mounts"))
 	if err != nil {
-		return nil
+		data, err = os.ReadFile(filepath.Join(procRoot, "mounts"))
+		if err != nil {
+			return nil
+		}
+	}
+	virtualFilesystems := map[string]bool{
+		"autofs": true, "bpf": true, "cgroup": true, "cgroup2": true,
+		"configfs": true, "debugfs": true, "devpts": true, "devtmpfs": true,
+		"efivarfs": true, "fusectl": true, "hugetlbfs": true, "mqueue": true,
+		"nsfs": true, "overlay": true, "proc": true, "pstore": true,
+		"ramfs": true, "securityfs": true, "squashfs": true, "sysfs": true,
+		"tmpfs": true, "tracefs": true,
 	}
 	seen := map[string]bool{}
 	result := []DiskMetric{}
@@ -471,19 +485,23 @@ func readDisks(hostRoot, procRoot string) []DiskMetric {
 		if len(fields) < 3 {
 			continue
 		}
-		mountpoint, fs := strings.ReplaceAll(fields[1], `\040`, " "), fields[2]
-		if seen[mountpoint] || strings.HasPrefix(mountpoint, "/proc") || strings.HasPrefix(mountpoint, "/sys") || strings.HasPrefix(mountpoint, "/dev") || strings.HasPrefix(mountpoint, "/run") {
+		mountpoint, fs := unescapeMount(fields[1]), fields[2]
+		if seen[mountpoint] || virtualFilesystems[fs] || strings.HasPrefix(mountpoint, "/proc") || strings.HasPrefix(mountpoint, "/sys") || strings.HasPrefix(mountpoint, "/dev") || strings.HasPrefix(mountpoint, "/run") {
 			continue
 		}
-		seen[mountpoint] = true
 		target := filepath.Join(hostRoot, strings.TrimPrefix(mountpoint, "/"))
 		if mountpoint == "/" {
 			target = hostRoot
+		}
+		info, err := os.Stat(target)
+		if err != nil || !info.IsDir() {
+			continue
 		}
 		var stat syscall.Statfs_t
 		if err := syscall.Statfs(target, &stat); err != nil || stat.Blocks == 0 {
 			continue
 		}
+		seen[mountpoint] = true
 		total := stat.Blocks * uint64(stat.Bsize)
 		free := stat.Bavail * uint64(stat.Bsize)
 		used := total - free
@@ -491,6 +509,11 @@ func readDisks(hostRoot, procRoot string) []DiskMetric {
 		result = append(result, DiskMetric{Mountpoint: mountpoint, Filesystem: fs, Total: total, Used: used, Free: free, Percent: percent})
 	}
 	return result
+}
+
+func unescapeMount(value string) string {
+	replacer := strings.NewReplacer(`\040`, " ", `\011`, "\t", `\012`, "\n", `\134`, `\`)
+	return replacer.Replace(value)
 }
 func (c *Client) collect(checks []PortCheck) Metrics {
 	currentCPU, _ := readCPU(c.cfg.ProcRoot)
