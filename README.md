@@ -27,9 +27,25 @@ EITS Monitor is a lightweight, self-hosted infrastructure monitoring platform wi
 
 ## Screenshots
 
-![EITS Monitor system overview](docs/screenshots/device-details.png)
+### System overview
 
-![EITS Monitor device details and network checks](docs/screenshots/network-checks.png)
+Live device health, hardware summaries, utilization, and last-report status from the monitored environment.
+
+![EITS Monitor system overview](docs/screenshots/system-overview.png)
+
+### Device monitoring
+
+Detailed hardware inventory, utilization history, disks, thresholds, and TCP/UDP network checks.
+
+![EITS Monitor device monitoring](docs/screenshots/device-monitoring.png)
+
+### Windows Agent Command Center
+
+The Windows agent includes a branded dark interface, live service and registration status, connection management, service controls, diagnostics, and system-tray operation.
+
+<p align="center">
+  <img src="windows-agent/Eits.Agent.Manager/Assets/eits-agent-icon.png" alt="EITS Agent monitoring shield" width="180">
+</p>
 
 ## Architecture
 
@@ -90,48 +106,45 @@ Supported targets:
 - Linux AMD64
 - Linux ARM64
 
-### Windows Agent Manager
+### Install on Windows
 
-The Windows package uses a hybrid design:
+The Windows agent is distributed as one self-contained installer. The monitored Windows computer does **not** need PowerShell scripts, .NET, Go, Git, Docker, or a development environment.
+
+The only client-side requirements are a supported 64-bit Windows 10/11 computer, permission to approve the installer’s Windows administrator prompt, network access to the EITS Monitor server, and valid enrollment details.
+
+Before starting, obtain these two values from the EITS Monitor administrator:
+
+- The EITS Monitor server URL, such as `https://monitor.example.com`
+- A valid agent enrollment token
+
+Installation:
+
+1. Download [`EITS-Agent-Setup-v0.5.0-alpha.12.exe`](https://github.com/ShodenEvo/eits-monitor/releases/download/v0.5.0-alpha.12/EITS-Agent-Setup-v0.5.0-alpha.12.exe).
+2. Open the downloaded installer and approve the standard Windows administrator prompt.
+3. Enter the server URL, enrollment token, and the name that should appear on the dashboard.
+4. Leave **Allow insecure HTTP** disabled when using HTTPS. Enable it only for an HTTP server on a trusted private network.
+5. Select **Install**, then open the Agent Manager when Setup finishes.
+
+Setup installs and starts the `EITSAgent` Windows service automatically. After successful enrollment, the device appears in the dashboard and the temporary enrollment token is removed from the local configuration.
+
+To upgrade, run the newer installer normally. Setup stops the existing agent, waits for its files to be released, installs the update, preserves the enrolled connection and identity, and restarts the service. No manual uninstall is required.
+
+Closing the Agent Manager sends it to the Windows notification area; monitoring continues in the background. To remove the agent, use **Settings > Apps > Installed apps > EITS Monitoring Agent > Uninstall**.
+
+### Windows Agent components
+
+The self-contained Windows package installs:
 
 - `Eits.Agent.Manager.exe`: responsive .NET 8 WPF interface and system tray
 - `Eits.Agent.Service.exe`: automatic Windows Service host
 - `Eits.Agent.Control.exe`: elevated, console-free service and connection helper
 - `eits-agent-engine.exe`: portable Go metrics and server-transport engine
 
-Closing the Manager hides it in the notification area and does not stop monitoring. Only one Manager instance can run at a time. Service operations execute asynchronously through native Windows APIs, so no PowerShell or black console windows appear during normal use.
+Only one Manager instance can run at a time. Service operations execute asynchronously through native Windows APIs, so no PowerShell or black console windows appear during normal use.
 
 The **Change connection** option accepts a server URL, enrollment token, device name, and trusted-network HTTP setting. It validates server health, protects the token from command-line exposure, waits for enrollment, and restores the previous configuration if reconnection fails.
 
-Build the Windows solution:
-
-```powershell
-dotnet build .\windows-agent\Eits.Agent.Windows.sln -c Release
-```
-
-Build self-contained Windows applications and the other agent targets:
-
-```powershell
-cd native-agent
-.\scripts\build.ps1
-```
-
-Windows clients do not require a separate .NET installation because release packages are self-contained. Use the `EITS-Agent-Setup-vX.Y.Z.exe` artifact from GitHub Releases for installation and upgrades.
-
-### Legacy PowerShell installation
-
-The script-based installer remains available for development and recovery. Run PowerShell as Administrator:
-
-```powershell
-Set-ExecutionPolicy -Scope Process Bypass
-
-.\install-agent.ps1 `
-  -ServerUrl "https://monitor.example.com" `
-  -EnrollmentToken "YOUR_ENROLLMENT_TOKEN" `
-  -DeviceName "SERVER-WIN01"
-```
-
-For isolated HTTP testing only, add `-AllowInsecureHttp`.
+Developer build instructions are maintained in the [Windows solution guide](windows-agent/README.md) and are not required for normal installation.
 
 ### Linux installation
 
@@ -170,9 +183,9 @@ Read [`SECURITY.md`](SECURITY.md) before exposing the application outside a trus
 
 ## Release status
 
-Current Windows and portable-agent release: **v0.5.0-alpha.12**
+Current Windows and portable-agent release: **[v0.5.0-alpha.12](https://github.com/ShodenEvo/eits-monitor/releases/tag/v0.5.0-alpha.12)**
 
-The redesigned .NET 8 Windows Agent Manager is available on `main` and is being prepared for the next prerelease. Agent update controls are intentionally reserved for a later release.
+This release includes the futuristic Windows Agent Command Center, system-tray integration, reliable in-place upgrades, enrollment recovery, service controls, dashboard device removal, searchable network checks, and process monitoring. Agent self-update controls remain reserved for a later release.
 
 See [`CHANGELOG.md`](CHANGELOG.md).
 
