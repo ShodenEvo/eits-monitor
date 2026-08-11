@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## [0.5.0-alpha.11] - 2026-08-11
+
+### Fixed
+
+- Stop and verify the existing `EITSAgent` service before Setup replaces application files.
+- Abort upgrades with the actual service-control error when Windows cannot stop the service.
+- Prevent Windows Restart Manager from reopening old agent processes during an upgrade.
+- Restart and verify the updated service only after all new binaries are installed.
+
 ## [0.5.0-alpha.10] - 2026-08-11
 
 ### Changed

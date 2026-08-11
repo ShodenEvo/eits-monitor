@@ -22,6 +22,8 @@ SolidCompression=yes
 WizardStyle=modern
 SetupIconFile=..\..\windows-agent\Eits.Agent.Manager\Assets\eits-agent-icon.ico
 UninstallDisplayIcon={app}\Eits.Agent.Manager.exe
+CloseApplications=force
+RestartApplications=no
 
 [Files]
 Source: "..\build\windows\Eits.Agent.Service.exe"; DestDir: "{app}"; Flags: ignoreversion
@@ -166,4 +168,47 @@ begin
     end;
     DeleteFile(ResultPath);
   end;
+end;
+
+function ReadControlResult(ResultPath: String): String;
+var
+  ResultMessageAnsi: AnsiString;
+begin
+  Result := '';
+  if FileExists(ResultPath) then begin
+    ResultMessageAnsi := '';
+    LoadStringFromFile(ResultPath, ResultMessageAnsi);
+    Result := String(ResultMessageAnsi);
+  end;
+end;
+
+function PrepareToInstall(var NeedsRestart: Boolean): String;
+var
+  HelperPath, ResultPath, Detail: String;
+  ResultCode: Integer;
+begin
+  Result := '';
+  NeedsRestart := False;
+  HelperPath := ExpandConstant('{app}\Eits.Agent.Control.exe');
+  ResultPath := ExpandConstant('{commonappdata}\EITS\Agent\install-stop.result');
+  ForceDirectories(ExpandConstant('{commonappdata}\EITS\Agent'));
+  DeleteFile(ResultPath);
+  WizardForm.StatusLabel.Caption := 'Stopping the existing EITS Agent service...';
+
+  if FileExists(HelperPath) then begin
+    if (not Exec(HelperPath, 'stop "' + ResultPath + '"', '', SW_HIDE,
+      ewWaitUntilTerminated, ResultCode)) or (ResultCode <> 0) then begin
+      Detail := ReadControlResult(ResultPath);
+      if Trim(Detail) = '' then
+        Detail := 'The service control helper returned exit code ' + IntToStr(ResultCode) + '.';
+      Result := 'Setup could not stop the existing EITSAgent Windows service. ' + Detail;
+    end;
+  end else begin
+    { Compatibility path for agents installed before the native control helper. }
+    Exec(ExpandConstant('{sys}\sc.exe'), 'stop EITSAgent', '', SW_HIDE,
+      ewWaitUntilTerminated, ResultCode);
+    Sleep(5000);
+  end;
+
+  DeleteFile(ResultPath);
 end;

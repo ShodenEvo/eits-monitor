@@ -170,7 +170,7 @@ Read [`SECURITY.md`](SECURITY.md) before exposing the application outside a trus
 
 ## Release status
 
-Current Windows and portable-agent release: **v0.5.0-alpha.10**
+Current Windows and portable-agent release: **v0.5.0-alpha.11**
 
 The redesigned .NET 8 Windows Agent Manager is available on `main` and is being prepared for the next prerelease. Agent update controls are intentionally reserved for a later release.
 
