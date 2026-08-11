@@ -91,10 +91,11 @@ end;
 
 function ShouldSkipPage(PageID: Integer): Boolean;
 var
-  ExistingConfig: String;
+  ExistingConfig, ExistingIdentity: String;
 begin
   ExistingConfig := ExpandConstant('{commonappdata}\EITS\Agent\config.json');
-  Result := FileExists(ExistingConfig) and
+  ExistingIdentity := ExpandConstant('{commonappdata}\EITS\Agent\identity.json');
+  Result := FileExists(ExistingConfig) and FileExists(ExistingIdentity) and
     ((PageID = ServerPage.ID) or (PageID = TokenPage.ID) or
      (PageID = DevicePage.ID) or (PageID = InsecurePage.ID));
 end;
@@ -130,7 +131,7 @@ begin
     StringChangeEx(EscapedLogDir, '\', '\\', True);
 
     ConfigPath := DataDir + '\config.json';
-    if not FileExists(ConfigPath) then begin
+    if (not FileExists(ConfigPath)) or (not FileExists(DataDir + '\identity.json')) then begin
       if InsecurePage.SelectedValueIndex = 0 then AllowHTTP := 'true' else AllowHTTP := 'false';
       JSON := '{' + #13#10 +
       '  "server_url": "' + ServerPage.Values[0] + '",' + #13#10 +

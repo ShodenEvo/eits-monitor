@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## [0.5.0-alpha.9] - 2026-08-11
+
+### Fixed
+
+- Prompt for a fresh server and enrollment token when an incomplete installation has a configuration file but no agent identity.
+- Preserve connection settings automatically only when the existing agent has completed enrollment.
+
 ## [0.5.0-alpha.8] - 2026-08-11
 
 ### Fixed
