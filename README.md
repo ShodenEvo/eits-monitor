@@ -27,9 +27,9 @@ EITS Monitor is a lightweight, self-hosted infrastructure monitoring platform wi
 
 ## Screenshots
 
-![Device monitoring details](docs/screenshots/device-details.png)
+![EITS Monitor system overview](docs/screenshots/device-details.png)
 
-![TCP and UDP network checks](docs/screenshots/network-checks.png)
+![EITS Monitor device details and network checks](docs/screenshots/network-checks.png)
 
 ## Architecture
 
@@ -170,7 +170,7 @@ Read [`SECURITY.md`](SECURITY.md) before exposing the application outside a trus
 
 ## Release status
 
-Current server and portable-agent release: **v0.4.0-alpha.1**
+Current Windows and portable-agent release: **v0.5.0-alpha.8**
 
 The redesigned .NET 8 Windows Agent Manager is available on `main` and is being prepared for the next prerelease. Agent update controls are intentionally reserved for a later release.
 

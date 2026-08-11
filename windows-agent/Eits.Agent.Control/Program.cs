@@ -1,4 +1,5 @@
 using Eits.Agent.Shared;
+using System.Diagnostics;
 using System.ServiceProcess;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -9,7 +10,9 @@ static class ControlProgram
 {
     public static async Task<int> RunAsync(string[] args)
     {
-        string? resultPath = args.Length > 0 && args[0].Equals("reconfigure", StringComparison.OrdinalIgnoreCase)
+        string? resultPath = args.Length > 0 &&
+            (args[0].Equals("reconfigure", StringComparison.OrdinalIgnoreCase) ||
+             args[0].Equals("install", StringComparison.OrdinalIgnoreCase))
             ? args.ElementAtOrDefault(2)
             : args.ElementAtOrDefault(1);
         try
@@ -20,6 +23,11 @@ static class ControlProgram
                 case "start": SetService(true); break;
                 case "stop": SetService(false); break;
                 case "restart": SetService(false); SetService(true); break;
+                case "install":
+                    if (args.Length < 3) throw new ArgumentException("Service installation request is incomplete.");
+                    InstallService(args[1]);
+                    await File.WriteAllTextAsync(args[2], "OK");
+                    break;
                 case "reconfigure":
                     if (args.Length < 3) throw new ArgumentException("Connection request is incomplete.");
                     await ReconfigureAsync(args[1]);
@@ -34,6 +42,54 @@ static class ControlProgram
             if (resultPath is not null) try { await File.WriteAllTextAsync(resultPath, ex.Message); } catch { }
             return 1;
         }
+    }
+
+    static void InstallService(string executable)
+    {
+        executable = Path.GetFullPath(executable);
+        if (!File.Exists(executable)) throw new FileNotFoundException("Windows service executable was not installed.", executable);
+
+        Directory.CreateDirectory(AgentPaths.DataDirectory);
+        Directory.CreateDirectory(Path.GetDirectoryName(AgentPaths.LogFile)!);
+        File.AppendAllText(AgentPaths.LogFile, $"{DateTime.UtcNow:u} installer: configuring Windows service{Environment.NewLine}");
+
+        var exists = ServiceExists();
+        if (exists)
+        {
+            try { SetService(false); } catch { }
+            RunServiceControl("config", "EITSAgent", "binPath=", $"\"{executable}\"", "start=", "auto", "DisplayName=", "EITS Monitoring Agent");
+        }
+        else
+        {
+            RunServiceControl("create", "EITSAgent", "binPath=", $"\"{executable}\"", "start=", "auto", "DisplayName=", "EITS Monitoring Agent");
+        }
+        RunServiceControl("description", "EITSAgent", "Collects and reports device health to EITS Monitor.");
+        if (!ServiceExists()) throw new InvalidOperationException("Windows reported success, but the EITSAgent service was not created.");
+        SetService(true);
+        File.AppendAllText(AgentPaths.LogFile, $"{DateTime.UtcNow:u} installer: Windows service installed and started{Environment.NewLine}");
+    }
+
+    static bool ServiceExists()
+    {
+        return ServiceController.GetServices().Any(service => service.ServiceName.Equals("EITSAgent", StringComparison.OrdinalIgnoreCase));
+    }
+
+    static void RunServiceControl(params string[] arguments)
+    {
+        var start = new ProcessStartInfo(Path.Combine(Environment.SystemDirectory, "sc.exe"))
+        {
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true
+        };
+        foreach (var argument in arguments) start.ArgumentList.Add(argument);
+        using var process = Process.Start(start) ?? throw new InvalidOperationException("Unable to run Windows service control.");
+        var output = process.StandardOutput.ReadToEnd();
+        var error = process.StandardError.ReadToEnd();
+        process.WaitForExit();
+        if (process.ExitCode != 0)
+            throw new InvalidOperationException($"Windows service configuration failed ({process.ExitCode}): {output} {error}".Trim());
     }
 
     static void SetService(bool start)

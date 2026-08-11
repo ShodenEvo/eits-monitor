@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+## [0.5.0-alpha.8] - 2026-08-11
+
+### Fixed
+
+- Replaced the installer PowerShell service-registration step with the native control helper.
+- Made installation fail with a useful message when Windows service creation or startup fails.
+- Created the ProgramData log directory and initial installation log before service startup.
+- Embedded the package version in Windows and Linux collection-engine builds.
+
+### Documentation
+
+- Refreshed the dashboard screenshots.
+- Release notes are now uploaded from a Markdown file so GitHub renders line breaks correctly.
+
 - Added authenticated server removal with complete deletion of metrics, inventory, checks, and process data.
 - Added search and client-side pagination to the Network Checks section.
 - Added cross-platform running-process inventory and persistent process availability monitoring.

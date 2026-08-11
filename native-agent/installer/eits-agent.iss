@@ -29,7 +29,6 @@ Source: "..\build\windows\Eits.Agent.Manager.exe"; DestDir: "{app}"; Flags: igno
 Source: "..\build\windows\eits-agent-engine.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\build\windows\eits-agent-updater.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\build\windows\eits-agent-updater.exe.manifest"; DestDir: "{app}"; Flags: ignoreversion
-Source: "..\scripts\activate-dotnet-service.ps1"; DestDir: "{tmp}"; Flags: deleteafterinstall
 
 [InstallDelete]
 Type: files; Name: "{app}\eits-agent-manager.exe"
@@ -52,8 +51,6 @@ Name: "{autostartup}\EITS Agent Manager"; Filename: "{app}\Eits.Agent.Manager.ex
 Name: "traystartup"; Description: "Start EITS Agent Manager when I sign in"; Flags: checkedonce
 
 [Run]
-Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -NonInteractive -ExecutionPolicy Bypass -File &quot;{tmp}\activate-dotnet-service.ps1&quot;"; Flags: runhidden waituntilterminated
-Filename: "{sys}\sc.exe"; Parameters: "description EITSAgent &quot;Collects and reports device health to EITS Monitor.&quot;"; Flags: runhidden waituntilterminated
 Filename: "{app}\Eits.Agent.Manager.exe"; Description: "Open EITS Agent Manager"; Flags: nowait postinstall skipifsilent
 
 [UninstallRun]
@@ -114,12 +111,17 @@ end;
 
 procedure CurStepChanged(CurStep: TSetupStep);
 var
-  DataDir, ConfigPath, JSON, AllowHTTP, EscapedDataDir, EscapedLogDir: String;
+  DataDir, ConfigPath, JSON, AllowHTTP, EscapedDataDir, EscapedLogDir,
+  ResultPath, ResultMessage: String;
+  ResultMessageAnsi: AnsiString;
+  ResultCode: Integer;
 begin
   if CurStep = ssPostInstall then begin
     DataDir := ExpandConstant('{commonappdata}\EITS\Agent');
     ForceDirectories(DataDir);
     ForceDirectories(DataDir + '\logs');
+    SaveStringToFile(DataDir + '\logs\eits-agent.log',
+      GetDateTimeString('yyyy-mm-dd hh:nn:ss', '-', ':') + ' installer: files copied and data directory prepared' + #13#10, True);
 
     EscapedDataDir := DataDir;
     StringChangeEx(EscapedDataDir, '\', '\\', True);
@@ -145,5 +147,21 @@ begin
       '}';
       SaveStringToFile(ConfigPath, JSON, False);
     end;
+
+    ResultPath := DataDir + '\install.result';
+    DeleteFile(ResultPath);
+    if (not Exec(ExpandConstant('{app}\Eits.Agent.Control.exe'),
+      'install "' + ExpandConstant('{app}\Eits.Agent.Service.exe') + '" "' + ResultPath + '"',
+      '', SW_HIDE, ewWaitUntilTerminated, ResultCode)) or (ResultCode <> 0) then begin
+      ResultMessage := '';
+      if FileExists(ResultPath) then begin
+        ResultMessageAnsi := '';
+        LoadStringFromFile(ResultPath, ResultMessageAnsi);
+        ResultMessage := String(ResultMessageAnsi);
+      end;
+      if Trim(ResultMessage) = '' then ResultMessage := 'The Windows service control helper returned exit code ' + IntToStr(ResultCode) + '.';
+      RaiseException('EITS Monitoring Agent service installation failed: ' + ResultMessage);
+    end;
+    DeleteFile(ResultPath);
   end;
 end;

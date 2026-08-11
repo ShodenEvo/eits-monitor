@@ -14,7 +14,7 @@ import (
 	elog "github.com/eitsio/eits-agent/internal/logging"
 )
 
-const version = "0.4.0-alpha.1"
+var version = "dev"
 
 func usage() {
 	fmt.Fprintf(os.Stderr, "EITS Monitoring Agent %s\n\n", version)
