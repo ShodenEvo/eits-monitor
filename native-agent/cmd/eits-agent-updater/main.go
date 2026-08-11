@@ -161,7 +161,7 @@ func main() {
 	backup := filepath.Join(tmp, "backup")
 	_ = os.MkdirAll(backup, 0755)
 	_ = windowsapp.RunServiceAction("stop")
-	names := []string{"eits-agent-service.exe", "eits-agent-manager.exe", "eits-agent-updater.exe"}
+	names := []string{"Eits.Agent.Service.exe", "Eits.Agent.Control.exe", "Eits.Agent.Manager.exe", "eits-agent-engine.exe", "eits-agent-updater.exe"}
 	for _, n := range names {
 		old := filepath.Join(install, n)
 		if _, e = os.Stat(old); e == nil {
@@ -183,7 +183,7 @@ func main() {
 		return
 	}
 	notify("EITS Update", "Updated successfully to "+m.Version+".\n\n"+m.Notes, false)
-	_ = exec.Command(filepath.Join(install, "eits-agent-manager.exe")).Start()
+	_ = exec.Command(filepath.Join(install, "Eits.Agent.Manager.exe")).Start()
 }
 func copyFile(src, dst string) error {
 	in, e := os.Open(src)

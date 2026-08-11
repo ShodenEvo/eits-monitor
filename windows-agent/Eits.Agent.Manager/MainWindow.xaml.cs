@@ -32,7 +32,7 @@ public partial class MainWindow : Window
         Loaded += async (_, _) => await RefreshStatusAsync();
     }
 
-    void ShowManager() { Show(); WindowState = WindowState.Normal; Activate(); }
+    public void ShowManager() { Show(); WindowState = WindowState.Normal; Activate(); }
     protected override void OnClosing(System.ComponentModel.CancelEventArgs e) { if (!exit) { e.Cancel = true; Hide(); return; } tray.Dispose(); base.OnClosing(e); }
 
     async Task RefreshStatusAsync()

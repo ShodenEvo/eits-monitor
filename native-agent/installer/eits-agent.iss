@@ -31,6 +31,19 @@ Source: "..\build\windows\eits-agent-updater.exe"; DestDir: "{app}"; Flags: igno
 Source: "..\build\windows\eits-agent-updater.exe.manifest"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\scripts\activate-dotnet-service.ps1"; DestDir: "{tmp}"; Flags: deleteafterinstall
 
+[InstallDelete]
+Type: files; Name: "{app}\eits-agent-manager.exe"
+Type: files; Name: "{app}\eits-agent-manager.exe.manifest"
+Type: files; Name: "{app}\eits-agent-manager-async.exe"
+Type: files; Name: "{app}\eits-agent-manager-async.exe.manifest"
+Type: files; Name: "{app}\eits-agent-manager-debug.exe"
+Type: files; Name: "{app}\eits-agent-manager-fixed.exe"
+Type: files; Name: "{app}\eits-agent-manager-fixed.exe.manifest"
+Type: files; Name: "{app}\eits-agent-manager-modern.exe"
+Type: files; Name: "{app}\eits-agent-manager-modern.exe.manifest"
+Type: files; Name: "{app}\eits-manager-test2.exe"
+Type: files; Name: "{app}\eits-manager-test3.exe"
+
 [Icons]
 Name: "{group}\EITS Agent Manager"; Filename: "{app}\Eits.Agent.Manager.exe"
 Name: "{autostartup}\EITS Agent Manager"; Filename: "{app}\Eits.Agent.Manager.exe"; Tasks: traystartup
