@@ -285,7 +285,7 @@ class InventoryIn(BaseModel):
 
 class PortCheckCreate(BaseModel):
     name: str = Field(min_length=1, max_length=200)
-    host: str = Field(min_length=1, max_length=255)
+    host: str = Field(default='127.0.0.1', min_length=1, max_length=255, exclude=True)
     port: int = Field(ge=1, le=65535)
     protocol: str = Field(default='tcp', pattern='^(tcp|udp)$')
     timeout_seconds: int = Field(default=3, ge=1, le=30)
@@ -491,7 +491,7 @@ def ingest_inventory(payload: InventoryIn, db: DB, x_agent_id: Annotated[str, He
 def agent_config(db: DB, x_agent_id: Annotated[str, Header()], x_agent_secret: Annotated[str, Header()]):
     device = authenticate_agent(db, x_agent_id, x_agent_secret)
     checks = list(db.scalars(select(PortCheck).where(PortCheck.device_id == device.id, PortCheck.enabled.is_(True))))
-    return {'revision': max([c.id for c in checks], default=0), 'port_checks': [{'id': c.id, 'name': c.name, 'host': c.host, 'port': c.port, 'protocol': c.protocol, 'timeout_seconds': c.timeout_seconds, 'udp_payload': c.udp_payload, 'expect_response': c.expect_response} for c in checks]}
+    return {'revision': max([c.id for c in checks], default=0), 'port_checks': [{'id': c.id, 'name': c.name, 'host': '127.0.0.1', 'port': c.port, 'protocol': c.protocol, 'timeout_seconds': c.timeout_seconds, 'udp_payload': c.udp_payload, 'expect_response': c.expect_response} for c in checks]}
 
 @app.post('/api/agent/metrics')
 def ingest(payload: MetricsIn, db: DB, x_agent_id: Annotated[str, Header()], x_agent_secret: Annotated[str, Header()]):
@@ -572,7 +572,7 @@ def thresholds(device_id: int, payload: ThresholdUpdate, db: DB, _: Annotated[Us
 @app.post('/api/devices/{device_id}/port-checks', status_code=201)
 def add_port_check(device_id: int, payload: PortCheckCreate, db: DB, _: Annotated[User, Depends(current_user)]):
     if not db.get(Device, device_id): raise HTTPException(404, 'Device not found')
-    check = PortCheck(device_id=device_id, **payload.model_dump())
+    check = PortCheck(device_id=device_id, host='127.0.0.1', **payload.model_dump())
     db.add(check); db.commit(); db.refresh(check)
     return {'id': check.id, 'name': check.name, 'host': check.host, 'port': check.port, 'protocol': check.protocol, 'timeout_seconds': check.timeout_seconds, 'udp_payload': check.udp_payload, 'expect_response': check.expect_response, 'enabled': check.enabled, 'latest': None}
 

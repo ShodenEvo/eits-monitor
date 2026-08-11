@@ -22,7 +22,7 @@ import (
 const version = "0.4.0-alpha.1"
 
 type Config struct {
-	ServerURL, EnrollmentToken, DeviceName, StateFile, HostRoot, ProcRoot string
+	ServerURL, EnrollmentToken, DeviceName, StateFile, HostRoot, ProcRoot, LocalCheckHost string
 	Interval                                                              time.Duration
 }
 type Identity struct {
@@ -129,7 +129,7 @@ func loadConfig() Config {
 		ServerURL:       strings.TrimRight(env("EITS_SERVER_URL", "http://localhost:8000"), "/"),
 		EnrollmentToken: os.Getenv("EITS_ENROLLMENT_TOKEN"), DeviceName: env("EITS_DEVICE_NAME", "eits-agent"),
 		StateFile: env("EITS_STATE_FILE", "/data/agent.json"), HostRoot: env("EITS_HOST_ROOT", "/hostfs"),
-		ProcRoot: env("EITS_PROC_ROOT", "/hostproc"), Interval: interval,
+		ProcRoot: env("EITS_PROC_ROOT", "/hostproc"), LocalCheckHost: os.Getenv("EITS_LOCAL_CHECK_HOST"), Interval: interval,
 	}
 }
 func readIdentity(path string) (Identity, error) {
@@ -500,6 +500,9 @@ func (c *Client) collect(checks []PortCheck) Metrics {
 	sent, recv := readNetwork(c.cfg.ProcRoot)
 	metrics := Metrics{RecordedAt: time.Now().UTC(), Hostname: hostname(), OS: runtime.GOOS, Architecture: runtime.GOARCH, AgentVersion: version, CPUPercent: cpuUsage, MemoryPercent: memPercent, MemoryTotal: total, MemoryUsed: used, UptimeSeconds: readUptime(c.cfg.ProcRoot), NetworkSent: sent, NetworkRecv: recv, Disks: readDisks(c.cfg.HostRoot, c.cfg.ProcRoot), PortResults: []PortResult{}, Processes: readProcesses(c.cfg.ProcRoot)}
 	for _, check := range checks {
+		if c.cfg.LocalCheckHost != "" {
+			check.Host = c.cfg.LocalCheckHost
+		}
 		metrics.PortResults = append(metrics.PortResults, checkPort(check))
 	}
 	return metrics

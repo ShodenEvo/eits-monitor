@@ -3,6 +3,7 @@
 ## Unreleased
 
 - Escalate device health from port, monitored-process, disk, and reporting failures with visible overview explanations.
+- Simplify network checks to device-local port monitoring by removing host entry and host display from the dashboard.
 
 ## [0.5.0-alpha.12] - 2026-08-11
 
