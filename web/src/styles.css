@@ -14,3 +14,17 @@
 .network-check-form{grid-template-columns:minmax(150px,1.5fr) minmax(90px,.7fr) 82px 82px auto}
 @media(max-width:900px){.network-check-form{grid-template-columns:1fr 1fr}.network-check-form button{grid-column:1/-1}}
 @media(max-width:560px){.network-check-form{grid-template-columns:1fr}.network-check-form button{grid-column:auto}}
+
+/* Disk capacity states follow the same green / amber / red health language. */
+.disk{padding:12px;border:1px solid transparent;border-radius:12px;transition:border-color .2s,background .2s}
+.disk b{display:flex;align-items:center;gap:8px}
+.disk b small{padding:3px 6px;border-radius:999px;font-size:.56rem;letter-spacing:.08em;text-transform:uppercase}
+.disk-normal{background:rgba(76,207,184,.035)}
+.disk-normal b{color:#65e7c8}.disk-normal b small{background:#123d36}
+.disk-warning{background:rgba(243,185,63,.09);border-color:#76591f;box-shadow:inset 3px 0 0 #f3b93f}
+.disk-warning b{color:#ffd269}.disk-warning b small{background:#4b3812}
+.disk-critical{background:rgba(255,101,115,.1);border-color:#7a323d;box-shadow:inset 3px 0 0 #ff6573}
+.disk-critical b{color:#ff9ba3}.disk-critical b small{background:#4d2025}
+.meter-normal span{background:linear-gradient(90deg,#4ccfb8,#5e9df4)}
+.meter-warning span{background:linear-gradient(90deg,#f3b93f,#ff8f3f)}
+.meter-critical span{background:linear-gradient(90deg,#ff7d68,#ff4057);box-shadow:0 0 10px rgba(255,64,87,.55)}

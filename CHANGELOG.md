@@ -6,6 +6,7 @@
 - Simplify network checks to device-local port monitoring by removing host entry and host display from the dashboard.
 - Allow fresh Docker agent builds when the dependency-free Go module has no generated `go.sum` file.
 - Correct Linux disk reporting by reading the host mount namespace and excluding container bind mounts and virtual filesystems.
+- Add threshold-aware disk colors, a CPU percentage suffix, and pagination for monitored processes.
 
 ## [0.5.0-alpha.12] - 2026-08-11
 
