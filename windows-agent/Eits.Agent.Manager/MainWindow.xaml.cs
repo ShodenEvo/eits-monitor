@@ -3,7 +3,9 @@ using System.Diagnostics;
 using System.Windows;
 using Forms = System.Windows.Forms;
 using MessageBox = System.Windows.MessageBox;
-using Brushes = System.Windows.Media.Brushes;
+using Brush = System.Windows.Media.Brush;
+using Color = System.Windows.Media.Color;
+using SolidColorBrush = System.Windows.Media.SolidColorBrush;
 
 namespace Eits.Agent.Manager;
 
@@ -16,7 +18,8 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
-        tray = new Forms.NotifyIcon { Icon = System.Drawing.SystemIcons.Application, Text = "EITS Agent Manager", Visible = true };
+        var trayIcon = System.Drawing.Icon.ExtractAssociatedIcon(Environment.ProcessPath!) ?? System.Drawing.SystemIcons.Application;
+        tray = new Forms.NotifyIcon { Icon = trayIcon, Text = "EITS Agent Manager", Visible = true };
         var menu = new Forms.ContextMenuStrip();
         menu.Items.Add("Open", null, (_, _) => Dispatcher.Invoke(ShowManager));
         menu.Items.Add("Start service", null, async (_, _) => await ControlAsync("start"));
@@ -39,12 +42,20 @@ public partial class MainWindow : Window
     {
         var status = await Task.Run(AgentStatusReader.Read);
         ServiceStateText.Text = status.ServiceState;
-        ServiceStateText.Foreground = status.ServiceState == "Running" ? Brushes.SeaGreen : Brushes.IndianRed;
+        var running = status.ServiceState == "Running";
+        var stateBrush = BrushFrom(running ? "#45E6D4" : "#FF6B7A");
+        ServiceStateText.Foreground = stateBrush;
+        StatusDot.Fill = stateBrush;
+        HeaderStatusDot.Fill = stateBrush;
+        HeaderStatusText.Text = running ? "SYSTEM ONLINE" : status.ServiceState.ToUpperInvariant();
+        HeaderStatusText.Foreground = stateBrush;
         RegistrationText.Text = status.Registered ? $"Registered - {status.AgentId}" : "Not registered";
         DeviceText.Text = status.DeviceName;
         ServerText.Text = status.ServerUrl;
         ActivityText.Text = string.IsNullOrWhiteSpace(status.LastActivity) ? "No activity recorded." : status.LastActivity;
     }
+
+    static Brush BrushFrom(string hex) => new SolidColorBrush((Color)System.Windows.Media.ColorConverter.ConvertFromString(hex));
 
     async Task ControlAsync(string action)
     {

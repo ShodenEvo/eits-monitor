@@ -16,7 +16,12 @@
     <UseWPF>true</UseWPF>
     <UseWindowsForms>true</UseWindowsForms>
     <AssemblyName>Eits.Agent.Manager</AssemblyName>
-    <ApplicationIcon></ApplicationIcon>
+    <ApplicationIcon>Assets\eits-agent-icon.ico</ApplicationIcon>
   </PropertyGroup>
+
+  <ItemGroup>
+    <Resource Include="Assets\eits-agent-icon.png" />
+    <Resource Include="Assets\eits-agent-icon.ico" />
+  </ItemGroup>
 
 </Project>

@@ -20,6 +20,7 @@ OutputBaseFilename=EITS-Agent-Setup-v{#MyAppVersion}
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
+SetupIconFile=..\..\windows-agent\Eits.Agent.Manager\Assets\eits-agent-icon.ico
 UninstallDisplayIcon={app}\Eits.Agent.Manager.exe
 
 [Files]

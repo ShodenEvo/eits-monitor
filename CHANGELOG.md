@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## [0.5.0-alpha.10] - 2026-08-11
+
+### Changed
+
+- Redesigned the Windows Agent Manager as a futuristic dark command center with responsive status, uplink, telemetry, operations, and quick-access panels.
+- Restyled the connection workflow to match the new agent interface.
+- Added an original EITS monitoring shield icon to the application window, executable, system tray, shortcuts, and installer.
+
 ## [0.5.0-alpha.9] - 2026-08-11
 
 ### Fixed
