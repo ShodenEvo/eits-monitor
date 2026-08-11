@@ -310,18 +310,35 @@ class ProcessMonitorCreate(BaseModel):
         return value.strip()
 
 
-def device_status(device: Device, latest_disks: list[DiskMetric]) -> str:
+def device_health(device: Device, latest_disks: list[DiskMetric], failed_ports: int, failed_processes: list[str]) -> tuple[str, list[str]]:
     if not device.last_seen:
-        return 'unknown'
+        return 'unknown', ['Waiting for the first agent report']
     age = (datetime.now(timezone.utc) - device.last_seen).total_seconds()
     if age > 180:
-        return 'offline'
-    maximum = max((d.percent for d in latest_disks), default=0)
-    if maximum >= device.critical_disk_percent:
-        return 'critical'
-    if maximum >= device.warning_disk_percent or age > 90:
-        return 'warning'
-    return 'healthy'
+        return 'offline', [f'Agent has not reported for {max(3, round(age / 60))} minutes']
+
+    critical_reasons = []
+    warning_reasons = []
+    critical_disks = [disk for disk in latest_disks if disk.percent >= device.critical_disk_percent]
+    warning_disks = [disk for disk in latest_disks if device.warning_disk_percent <= disk.percent < device.critical_disk_percent]
+    if critical_disks:
+        critical_reasons.append(f'{len(critical_disks)} disk{"s" if len(critical_disks) != 1 else ""} above critical threshold')
+    if failed_processes:
+        critical_reasons.append(f'{len(failed_processes)} monitored process{"es" if len(failed_processes) != 1 else ""} not running')
+    if failed_ports >= 2:
+        critical_reasons.append(f'{failed_ports} network checks failing')
+    elif failed_ports == 1:
+        warning_reasons.append('1 network check failing')
+    if warning_disks:
+        warning_reasons.append(f'{len(warning_disks)} disk{"s" if len(warning_disks) != 1 else ""} above warning threshold')
+    if age > 90:
+        warning_reasons.append('Agent reporting is delayed')
+
+    if critical_reasons:
+        return 'critical', critical_reasons + warning_reasons
+    if warning_reasons:
+        return 'warning', warning_reasons
+    return 'healthy', []
 
 
 def latest_disks(db: Session, device_id: int) -> list[DiskMetric]:
@@ -334,13 +351,22 @@ def latest_disks(db: Session, device_id: int) -> list[DiskMetric]:
 def serialise_device(db: Session, d: Device):
     metric = db.scalar(select(Metric).where(Metric.device_id == d.id).order_by(Metric.recorded_at.desc()).limit(1))
     disks = latest_disks(db, d.id)
+    enabled_check_ids = select(PortCheck.id).where(PortCheck.device_id == d.id, PortCheck.enabled.is_(True))
     failed_ports = db.scalar(
         select(func.count()).select_from(PortResult).where(
             PortResult.device_id == d.id,
-            PortResult.id.in_(select(func.max(PortResult.id)).where(PortResult.device_id == d.id).group_by(PortResult.check_id)),
+            PortResult.check_id.in_(enabled_check_ids),
+            PortResult.id.in_(select(func.max(PortResult.id)).where(
+                PortResult.device_id == d.id,
+                PortResult.check_id.in_(enabled_check_ids),
+            ).group_by(PortResult.check_id)),
             PortResult.is_up.is_(False),
         )
     ) or 0
+    monitored_processes = list(db.scalars(select(ProcessMonitor).where(ProcessMonitor.device_id == d.id).order_by(ProcessMonitor.name)))
+    running_names = {name.casefold() for name in db.scalars(select(RunningProcess.name).where(RunningProcess.device_id == d.id))}
+    failed_process_names = [monitor.name for monitor in monitored_processes if monitor.name.casefold() not in running_names]
+    status, health_reasons = device_health(d, disks, failed_ports, failed_process_names)
     inventory = d.inventory
     inventory_data = None if not inventory else {
         'collected_at': inventory.collected_at, 'manufacturer': inventory.manufacturer,
@@ -357,7 +383,7 @@ def serialise_device(db: Session, d: Device):
     return {
         'id': d.id, 'name': d.name, 'hostname': d.hostname, 'os': d.os,
         'architecture': d.architecture, 'agent_version': d.agent_version,
-        'last_seen': d.last_seen, 'status': device_status(d, disks),
+        'last_seen': d.last_seen, 'status': status,
         'warning_disk_percent': d.warning_disk_percent,
         'critical_disk_percent': d.critical_disk_percent,
         'metric': None if not metric else {
@@ -367,7 +393,9 @@ def serialise_device(db: Session, d: Device):
             'network_sent': metric.network_sent, 'network_recv': metric.network_recv,
         },
         'disks': [{'mountpoint': x.mountpoint, 'filesystem': x.filesystem, 'total': x.total, 'used': x.used, 'free': x.free, 'percent': x.percent} for x in disks],
-        'failed_ports': failed_ports, 'inventory': inventory_data,
+        'failed_ports': failed_ports, 'failed_processes': len(failed_process_names),
+        'failed_process_names': failed_process_names, 'total_failed_checks': failed_ports + len(failed_process_names),
+        'health_reasons': health_reasons, 'inventory': inventory_data,
     }
 
 

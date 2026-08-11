@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Escalate device health from port, monitored-process, disk, and reporting failures with visible overview explanations.
+
 ## [0.5.0-alpha.12] - 2026-08-11
 
 ### Fixed

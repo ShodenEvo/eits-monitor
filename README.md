@@ -23,6 +23,7 @@ EITS Monitor is a lightweight, self-hosted infrastructure monitoring platform wi
 - TCP and UDP endpoint checks
 - Per-device enrollment credentials
 - Metric history and device health states
+- Explainable Warning and Critical states driven by disks, network checks, monitored processes, and agent availability
 - Smartphone-friendly interface
 
 ## Screenshots
