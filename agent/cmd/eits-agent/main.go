@@ -23,7 +23,7 @@ const version = "0.4.0-alpha.1"
 
 type Config struct {
 	ServerURL, EnrollmentToken, DeviceName, StateFile, HostRoot, ProcRoot, LocalCheckHost string
-	Interval                                                              time.Duration
+	Interval                                                                              time.Duration
 }
 type Identity struct {
 	AgentID     string `json:"agent_id"`
