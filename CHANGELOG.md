@@ -7,6 +7,7 @@
 - Allow fresh Docker agent builds when the dependency-free Go module has no generated `go.sum` file.
 - Correct Linux disk reporting by reading the host mount namespace and excluding container bind mounts and virtual filesystems.
 - Add threshold-aware disk colors, a CPU percentage suffix, and pagination for monitored processes.
+- Use consistent CPU and memory labels with percentage units displayed alongside both values.
 
 ## [0.5.0-alpha.12] - 2026-08-11
 
